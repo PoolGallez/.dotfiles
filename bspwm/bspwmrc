@@ -1,0 +1,51 @@
+#! /bin/sh
+
+# Exec the Simple X HotKey Deamon
+pgrep -x sxhkd > /dev/null || sxhkd &
+
+# Set the background :) 
+~/.fehbg &
+
+# Keyboard layout to italian 
+setxkbmap it
+
+# Exec the compositor (picom) 
+picom &
+
+# Exec polybar 
+$HOME/.config/polybar/launch.sh light
+
+# Set the natural scrolling of the touchpad.
+# To do so, we need to get the touchpad ID and set the property related to natural scrolling
+# With: xinput list-devices i found the id of the touchpad (15) then xinput list-props to see the property id related to natural scrolling (301) and finally i set its value: 
+
+# xinput set-prop <device_ID> <prop_ID> <value>
+xinput set-prop 15 301 1
+
+
+# We exploit the same framework to set the possibility to tap to click
+xinput set-prop 15 324 1
+
+# Note that this setup works correctly on my pc that has the touchpad on ID 15, one might create a script 
+# that automatically seeks for the touchpad id and search for the desired properties which might not have
+# the same id on all computers
+
+# Default configuration of BSPWM that i need to change at some point
+bspc monitor -d I II III IV V 
+
+bspc config border_width         2
+bspc config window_gap          12
+bspc config border_radius	12
+
+# Enable the option where focus moves on mouse hover
+bspc config focus_follows_pointer true
+
+bspc config split_ratio          0.52
+bspc config borderless_monocle   true
+bspc config gapless_monocle      true
+
+bspc rule -a Gimp desktop='^8' state=floating follow=on
+bspc rule -a Chromium desktop='^2'
+bspc rule -a mplayer2 state=floating
+bspc rule -a Kupfer.py focus=on
+bspc rule -a Screenkey manage=off
