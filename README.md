@@ -3,6 +3,7 @@ Repo containing my dotfiles.
 ## Dependencies
 * Text editor: neovim -> nvim 
 	* Plugin manager: vim-plug. From the settings it is clear that the plugged folder is needed to store the plugins 
+	* Code completion engine: Youcompleteme. Please go into its folder (plugged/youcompleteme/) and run insatll.py, otherwise you'd have ycmd server constantly shutting down
 * Window manager: BSPWM (Binary Space Partitioning Window Manager) the rounded corner edition  (on the AUR)
 * Shortcut deamon: SXHKD (Simple X HotKey Deamon) -> still on Xorg :(
 * To set the background: feh 
