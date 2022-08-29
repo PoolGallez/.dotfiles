@@ -62,8 +62,11 @@ chsh -s /usr/bin/zsh
 The theme in use needs some fonts to be used and set in the terminal, in particular it requires the nerd fonts: `sudo pacman -S ttf-nerd-fonts-symbols ttf-nerd-fonts-symbols-mono` 
 
 #### How does zsh look like? 
+In this image you can see how code completion and syntax highlighting works in zsh with the above configuration as well as have an idea of how the shell should look like. 
 ![Zsh highlight completion](https://github.com/PoolGallez/.dotfiles/blob/main/images/zsh_high_compl.png?raw=true "Zsh syntax highlighting and completion")
 
+Here you can see how the theme adapts in the case that your working directory is a git repository with some not-committed changes
 ![Zsh not commited repo changes](https://github.com/PoolGallez/.dotfiles/blob/main/images/zsh_staged_notComm.png?raw=true "Zsh changes not committed yet")
 
+Here you can see how the theme adapts in the case taht your working directory is a git repository with some committed but not pushed changes
 ![Zsh changes not pushed](https://github.com/PoolGallez/.dotfiles/blob/main/images/zsh_commt_notPush.png?raw=true "Zsh changes not pushed yet")
