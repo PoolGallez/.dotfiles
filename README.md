@@ -61,4 +61,4 @@ chsh -s /usr/bin/zsh
 #### Note about the theme
 The theme in use needs some fonts to be used and set in the terminal, in particular it requires the nerd fonts: `sudo pacman -S ttf-nerd-fonts-symbols ttf-nerd-fonts-symbols-mono` 
 
-
+#### How does zsh look like? 
