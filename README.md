@@ -15,7 +15,7 @@ This is a starting point, hopefully i will extend it when i am ready with polyba
 * Shell: Zsh
 
 ## Instructions 
-
+    
 ### NeoVim
 You can install neovim using the package from the arch repositories and install also the package python-pynvim to have the compatibility with the plugin Youcompleteme for the autocompletion engine. 
 ``` 
@@ -32,18 +32,6 @@ create `~/.config/nvim/plugged`, open a neovim window and run :PlugInstall to in
 
 Then to have the Youcompleteme plugin working correctly, please navigate to `~/.config/nvim/plugged/youcompleteme` and run the `install.py` script. 
 
-### BSPWM & SXHKD 
-Install both `bspwm` and `sxhkd`, in particular here we are going to use a fork of `bspwm` which enables rounded corners which can be found as `bspwm-rounded-corners` on the AUR.
-
-Then create the folders `~/.config/bspwm/` and `~/.config/sxhkd` and put the configuration files of this repo in their respective folders 
-
-### Compositor 
-The compositor of choice is the standar `picom` which enables some effects, window shadows and so on. 
-
-```
-$ pacman -S picom 
-```
-Then copy the configuration file in this repo (i will put it) and copy it in `~/.config/picom/picom.conf`, i setted some fading-effects and window shadows as well as rounded corners directly from the compositor
 ### Installation and configuration of Zsh
 Zsh is a shell different from bash that has some additional features like syntax-highighting, completion based on history and some more powerful theming.
 
