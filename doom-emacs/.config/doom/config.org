@@ -1,0 +1,93 @@
+#+title: My personal config file for DoomEmacs
+#+PROPERTY: header-args:elisp :tangle ./config.el
+
+
+* UI Configuration
+** User configuration
+This part of the configuration is needed seens some functions requires a user name and/or an email (for instance Magit, git client in Emacs)
+#+begin_src elisp
+;; Some functionality uses this to identify you, e.g. GPG configuration, email
+;; clients, file templates and snippets. It is optional.
+(setq user-full-name "Paolo Galletta"
+      user-mail-address "galletta.paolo98@gmail.com")
+#+end_src
+** Text Editor
+*** Relative numbers
+Set the linenumbers to be both absolute and relative for ease of navigation
+#+begin_src elisp
+;; This determines the style of line numbers in effect. If set to `nil', line
+;; numbers are disabled. For relative line numbers, set this to `relative'.
+(setq display-line-numbers-type 'relative)
+#+end_src
+** Theme
+#+begin_src elisp
+;; There are two ways to load a theme. Both assume the theme is installed and
+;; available. You can either set `doom-theme' or manually load a theme with the
+;; `load-theme' function. This is the default:
+(setq doom-theme 'doom-nord)
+#+end_src
+
+#+RESULTS:
+: doom-nord
+
+* Org
+** General Org configuration
+Setting the default directory for org files
+#+begin_src elisp
+(setq org-directory "~/Documents/PKDB_Org/Notes")
+#+end_src
+** Org Roam
+Setup of org roam nodes directory
+#+begin_src elisp
+(setq org-roam-directory "~/Documents/PKDB_Org/Zettlekasten")
+#+end_src
+*** Org Roam UI
+To make org-roam ui to work, please unpin the default roam version shipped with doom as it is too old, so in the packages.el it is necessary unpin org-roam and install org-roam-ui
+
+#+begin_src elisp
+;
+; Setup org-roam-ui
+;
+(use-package! websocket
+  :after org-roam)
+(use-package! org-roam-ui
+  :after org-roam
+  :config
+  (setq org-roam-ui-sync-theme t
+        org-roam-ui-follow t
+        org-roam-ui-update-on-save t
+        org-roam-uiopen-on-start t))
+#+end_src
+
+** Babel (Compile and exec code, export codeblocks, eval latex, ...)
+*** Specifying tangle at file level
+To specify a code block is to be exported to a file (tangle feature), the property ~:tangle {file-path}~
+In order not to do it in all codeblocks, this can be appended at the beginning of the file (all the blocks of the given file will be tangled) adding it as a property:
+<#+begin_src emacs-lisp
+#+PROPERTY: header-args:emacs-lisp :tangle ./config.el
+#+end_src
+First part just specifies that the programming language for the entire file will be elisp
+Please consider putting the name as elisp instead of emacs-lisp, otherwise it does not work since babel can't find emacs-lisp in blocks
+
+*** Auto-tangle configuration file (on save)
+This function defines a callback that allows to auto tangle files on-save event, it is taylored (ty System Crafters yt) to let this happen only on the config.org file, since autotangling all other org files might be annoying
+#+begin_src elisp
+;; Automatically tangle our Emacs.org config file when we save it
+(defun glz/org-babel-tangle-config ()
+  (when (string-equal (buffer-file-name)
+                      (expand-file-name "~/.config/doom/config.org"))
+
+    (let ((org-confirm-babel-evaluate nil))
+      (org-babel-tangle))))
+
+(add-hook 'org-mode-hook (lambda () (add-hook 'after-save-hook #'glz/org-babel-tangle-config)))
+#+end_src
+
+
+* Miscellaneous
+** Forcing basrc
+Since in my local computer I am using fish as shell environment and emacs does not coope well with it, it is necessary to force the shell environment to fall back to bash
+#+begin_src elisp
+(setq shell-file-name (executable-find
+      "bash"))
+#+end_src
