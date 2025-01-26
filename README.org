@@ -1,55 +1,56 @@
-# Dotfiles
+* Dotfiles
 Repo containing my dotfiles.
 
 This is a starting point, hopefully i will extend it when i am ready with polybar, rofi, etc... 
-## Dependencies
-* Text editor: neovim -> nvim 
-	* Plugin manager: vim-plug.  
-	* Code completion engine: Youcompleteme. 
-* Window manager: BSPWM (Binary Space Partitioning Window Manager) the rounded corner edition  (on the AUR)
-* Shortcut deamon: SXHKD (Simple X HotKey Deamon) -> still on Xorg :(
-* To set the background: feh 
-* Menu launcher: rofi 
-* Compositor: picom standard
-* Terminal emulator: Alacritty 
-* Shell: Zsh
-
-## Instructions 
-    
-### NeoVim
+** Dependencies
++ Text editor: neovim -> nvim
+  + Plugin manager: vim-plug.
+  + Code completion engine: Youcompleteme.
++ Shell: Zsh
++ Installation & Dotfiles management: Gnu Stow
++ This thing called emacs
+** Instructions
+*** NeoVim
 You can install neovim using the package from the arch repositories and install also the package python-pynvim to have the compatibility with the plugin Youcompleteme for the autocompletion engine. 
-``` 
+#+begin_src bash
 $ pacman -S neovim python-pynvim
-```
-then create a folder `~/.config/nvim` and put the int.vim configuration file of this repo.
+#+end_src
+
+then create a folder ~~/.config/nvim~ and put the ~int.vim~ configuration file of this repo.
 
 To enable plugins, install vim-plug according to its installation guide for neovim: 
-```
+#+begin_src bash
 $ sh -c 'curl -fLo "${XDG_DATA_HOME:-$HOME/.local/share}"/nvim/site/autoload/plug.vim --create-dirs \
        https://raw.githubusercontent.com/junegunn/vim-plug/master/plug.vim'
-```
-create `~/.config/nvim/plugged`, open a neovim window and run :PlugInstall to install the plugins. 
+#+end_src
 
-Then to have the Youcompleteme plugin working correctly, please navigate to `~/.config/nvim/plugged/youcompleteme` and run the `install.py` script. 
+create ~~/.config/nvim/plugged~, open a neovim window and run :PlugInstall to install the plugins.
 
-### Installation and configuration of Zsh
+Then to have the Youcompleteme plugin working correctly, please navigate to ~~/.config/nvim/plugged/youcompleteme~ and run the ~install.py~ script.
+*** Doom Emacs
+I just discovered Emacs this year, couldn't understand what it was about, then I started using it and OMG what is this I am 4hrs clicking stuff in here.
+
+Doom Emacs is a distro of Emacs with evil-mode (vim keybindings), to install doom it is first necessary to install plain emacs:
+#+begin_src bash
+pacman -S emacs
+#+end_src
+
+then follow the instruction on the offcial github page for doom: https://github.com/doomemacs/doomemacs
+*** Installation and configuration of Zsh
 Zsh is a shell different from bash that has some additional features like syntax-highighting, completion based on history and some more powerful theming.
 
 To install zsh follow the instructions in the Arch wiki, particularly install: 
-* Zsh (of course) `$ pacman -S zsh` 
-* The autocompletion and syntax highlighting themes: `$ pacman -S zsh-completion zsh-autosuggestions zsh-syntax-highlighting`
-* The theme in use (powerlevel10k): `$ pacman -S zsh-theme-powerlevel10k`
++ Zsh (of course) ~$ pacman -S zsh~
++ The autocompletion and syntax highlighting themes: ~$ pacman -S zsh-completion zsh-autosuggestions zsh-syntax-highlighting~
++ The theme in use (powerlevel10k): ~$ pacman -S zsh-theme-powerlevel10k~
 
-Then simply copy .zshrc and .p10k.zsh into the home folder. 
-
-Please recall that you should set zsh as the user's default shell: 
-``` 
+Please recall that you should set zsh as the user's default shell:
+#+begin_src bash
 chsh -s /usr/bin/zsh
-```
-#### Note about the theme
-The theme in use needs some fonts to be used and set in the terminal, in particular it requires the nerd fonts: `sudo pacman -S ttf-nerd-fonts-symbols ttf-nerd-fonts-symbols-mono` 
-
-#### How does zsh look like? 
+#+end_src
+**** Note about the theme
+The theme in use needs some fonts to be used and set in the terminal, in particular it requires the nerd fonts: ~sudo pacman -S ttf-nerd-fonts-symbols ttf-nerd-fonts-symbols-mono~
+***** How does zsh look like?
 In this image you can see how code completion and syntax highlighting works in zsh with the above configuration as well as have an idea of how the shell should look like. 
 ![Zsh highlight completion](https://github.com/PoolGallez/.dotfiles/blob/main/images/zsh_high_compl.png?raw=true "Zsh syntax highlighting and completion")
 
@@ -58,3 +59,17 @@ Here you can see how the theme adapts in the case that your working directory is
 
 Here you can see how the theme adapts in the case taht your working directory is a git repository with some committed but not pushed changes
 ![Zsh changes not pushed](https://github.com/PoolGallez/.dotfiles/blob/main/images/zsh_commt_notPush.png?raw=true "Zsh changes not pushed yet")
+
+*** GNU Stow
+GNU Stow is the tool that will perform the installation of the following configuration files at the correct places.
+This tool allows to unify the installation directory of the dotfiles (this repo) and installs the configuration in the proper spot of the distro by following the hierarchy configured with this repo
+
+For instance, since I put doom-emacs module in here with the configs at the path ~/.dotfiles/doom-emacs/.config/doom~, running GNU Stow will place the content of this directory under ~/.config/doom/~
+
+This software is also smart since it is not copying / moving the files at that directory, but it is creating symlinks to the files in this repo, therefore once something it is edited here, everything will be also reflected in the local machine configuration, unifying the management of the dotfiles
+
+*Reminder* Keep the folder structure of this directory consistent with the one of the local machine, otherwise the symlink will be created wrongly
+
+#+begin_src bash
+stow {"folder of this repo"}
+#+end_src
