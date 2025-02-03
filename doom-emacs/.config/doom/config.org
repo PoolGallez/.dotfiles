@@ -27,9 +27,9 @@ Set the linenumbers to be both absolute and relative for ease of navigation
 (setq doom-theme 'doom-nord)
 #+end_src
 
-
 * Org
 ** General Org configuration
+*** Notes directory
 Setting the default directory for org files
 This is set conditionally depending on whether I am on windows machine (work laptop) or on my own computers (Linux)
 #+begin_src elisp
@@ -49,13 +49,13 @@ Setup of org roam nodes directory
 #+begin_src elisp
 (when (string= "windows-nt" system-type)
   ;; Configuration for windows
-  (setq org-directory "~/Desktop/PKDB_Org/Zettlekasten")
+  (setq org-roam-directory "~/Desktop/PKDB_Org/Zettlekasten/")
   )
 
 (when (string= "gnu/linux" system-type)
   ;; Configuration for Linux
 
-  (setq org-directory "~/Documents/PKDB_Org/Zettlekasten")
+  (setq org-roam-directory "~/Documents/PKDB_Org/Zettlekasten/")
   )
 #+end_src
 *** Org Roam UI
@@ -101,7 +101,8 @@ This function defines a callback that allows to auto tangle files on-save event,
 
 (add-hook 'org-mode-hook (lambda () (add-hook 'after-save-hook #'glz/org-babel-tangle-config)))
 #+end_src
-
+** Reading pdfs in  Emacs
+Default pdf viewer does not seem to work out of the box, so pdf-tools extension is used and installed with packages.el, here some config
 
 * Miscellaneous
 ** Forcing basrc
@@ -109,4 +110,9 @@ Since in my local computer I am using fish as shell environment and emacs does n
 #+begin_src elisp
 (setq shell-file-name (executable-find
       "bash"))
+#+end_src
+** Forcing Emacs to Home Directory (Windows)
+Emacs on windoow's default directory is wherever it was installed, I want to point to the home directory
+#+begin_src elisp
+(setq default-directory "~")
 #+end_src
