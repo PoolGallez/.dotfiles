@@ -1,7 +1,5 @@
 #+title: My personal config file for DoomEmacs
 #+PROPERTY: header-args:elisp :tangle ./config.el
-
-
 * UI Configuration
 ** User configuration
 This part of the configuration is needed seens some functions requires a user name and/or an email (for instance Magit, git client in Emacs)
@@ -45,6 +43,7 @@ This is set conditionally depending on whether I am on windows machine (work lap
   )
 #+end_src
 ** Org Roam
+*** Directory setup
 Setup of org roam nodes directory
 #+begin_src elisp
 (when (string= "windows-nt" system-type)
@@ -75,7 +74,92 @@ To make org-roam ui to work, please unpin the default roam version shipped with 
         org-roam-ui-update-on-save t
         org-roam-uiopen-on-start t))
 #+end_src
+*** Org Roam - Immediate insertion
+Org roam opens an interactive buffer automatically when trying to insert a node, meaning that when you use the keybindings to insert the new node, org-roam expects that you would start writing into the new node immediately
+To keep the flow when writing, it might be necessary to keep writing on the current node to then jump in this secondary node later, this custom function is to achieve such functionality
+#+begin_src elisp
+;; Bind this to Spc n r I
+(defun org-roam-node-insert-immediate (arg &rest args)
+  (interactive "P")
+  (let ((args (cons arg args))
+        (org-roam-capture-templates (list (append (car org-roam-capture-templates)
+                                                  '(:immediate-finish t)))))
+    (apply #'org-roam-node-insert args)))
+#+end_src
+*** Org Roam - Agenda integration
+The agenda system in org works by specifying the agenda files, namely the files containing the todos from which the agenda view will be built.
+This does not integrate really well with my workflow as I'd like to put todos directly where I am writing the notes, and then see them in the agenda.
+After some researches I stumbled upon the following configurations that allow this to happen by filtering which nodes have a todo in it, and dynamically updating the agenda files depending on this filtered list.
+This is necessary because putting directly the org-roam folder as agenda files slows down incredibly the agenda view as it parses all the files in that folder
+**** Custom function definition
+#+begin_src elisp
+(add-hook 'org-roam-file-setup-hook #'glz/update-todo-tag)
+(add-hook 'before-save-hook #'glz/update-todo-tag)
+(advice-add 'org-agenda :before #'glz/update-todo-files)
+(defun glz/todo-p ()
+  "Return non-nil if current buffer has any TODO entry.
 
+TODO entries marked as done are ignored, meaning the this
+function returns nil if current buffer contains only completed
+tasks."
+  (org-element-map
+      (org-element-parse-buffer 'headline)
+      'headline
+    (lambda (h)
+      (eq (org-element-property :todo-type h)
+          'todo))
+    nil 'first-match))
+
+(defun glz/update-todo-tag ()
+  "Update TODO tag in the current buffer."
+  (when (and (not (active-minibuffer-window))
+             (org-roam--org-file-p buffer-file-name))
+    (let* ((file (buffer-file-name (buffer-base-buffer)))
+           (all-tags (org-roam--extract-tags file))
+           (prop-tags (org-roam--extract-tags-prop file))
+           (tags prop-tags))
+      (if (glz/todo-p)
+          (setq tags (seq-uniq (cons "todo" tags)))
+        (setq tags (remove "todo" tags)))
+      (unless (equal prop-tags tags)
+        (org-roam--set-global-prop
+         "roam_tags"
+         (combine-and-quote-strings tags))))))
+
+(defun glz/todo-files ()
+  "Return a list of note files containing todo tag."
+  (seq-map
+   #'car
+   (org-roam-db-query
+    [:select file
+             :from tags
+             :where (like tags (quote "%\"todo\"%"))])))
+
+(defun glz/update-todo-files (&rest _)
+  "Update the value of `org-agenda-files'."
+  (setq org-agenda-files (glz/todo-files)))
+#+end_src
+**** Migration of current DB
+#+begin_src elisp
+(dolist (file (org-roam-list-files))
+  (message "processing %s" file)
+  (with-current-buffer (or (find-buffer-visiting file)
+                           (find-file-noselect file))
+    (glz/update-todo-files)
+    (save-buffer)))
+#+end_src
+
+#+RESULTS:
+
+
+#+begin_src elisp
+(dolist (file (org-roam-list-files))
+  (message "processing %s" file)
+  (with-current-buffer (or (find-buffer-visiting file)
+                           (find-file-noselect file))
+    (glz/update-todo-files)
+    (save-buffer)))
+#+end_src
 ** Babel (Compile and exec code, export codeblocks, eval latex, ...)
 *** Specifying tangle at file level
 To specify a code block is to be exported to a file (tangle feature), the property ~:tangle {file-path}~
@@ -88,13 +172,13 @@ Please consider putting the name as elisp instead of emacs-lisp, otherwise it do
 
 *** Auto-tangle configuration file (on save)
 This function defines a callback that allows to auto tangle files on-save event, it is taylored (ty System Crafters yt) to let this happen only on the config.org file, since autotangling all other org files might be annoying
+
 #+begin_src elisp
 ;; Automatically tangle our Emacs.org config file when we save it
 (defun glz/org-babel-tangle-config ()
-  (when (string-equal (buffer-file-name)
-                      ; Temporary comment
+  (when (string-equal (file-name-nondirectory buffer-file-name)
                       ; Select different location depending on the os (hopefully this works in elisp :D)
-                      (expand-file-name (concat doom-user-dir "config.org" )))
+                      "config.org")
 
     (let ((org-confirm-babel-evaluate nil))
       (org-babel-tangle))))
@@ -102,7 +186,15 @@ This function defines a callback that allows to auto tangle files on-save event,
 (add-hook 'org-mode-hook (lambda () (add-hook 'after-save-hook #'glz/org-babel-tangle-config)))
 #+end_src
 ** Reading pdfs in  Emacs
-Default pdf viewer does not seem to work out of the box, so pdf-tools extension is used and installed with packages.el, here some config
+pdf-tools in doom emacs seems to be working... out-of-the-box? 
+* Key bindings
+This section contians all the custom keybindings for the custom functions I develop / integrate in my workflow
+** org-roam-insert-immediate
+#+begin_src elisp
+(map! :after org-roam
+      :map org-roam-immediate-insert
+      "SPC n r I" #'org-roam-insert-immediate)
+#+end_src
 
 * Miscellaneous
 ** Forcing basrc
