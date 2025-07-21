@@ -160,6 +160,12 @@ tasks."
     (glz/update-todo-files)
     (save-buffer)))
 #+end_src
+** Latex Preview
+This allows the backend for dvipng to produce latex equations directly in org mode files 
+Please ntoe that you need to have installed: ~texlive-latexrecommended texlive-latexextra texlive-fontsrecommended texlive-fontsextra texlive-plaingeneric~ (Arch linux repos)
+#+begin_src elisp
+(setq org-latex-create-formula-image-program 'dvipng)
+#+end_src 
 ** Babel (Compile and exec code, export codeblocks, eval latex, ...)
 *** Specifying tangle at file level
 To specify a code block is to be exported to a file (tangle feature), the property ~:tangle {file-path}~
@@ -186,7 +192,57 @@ This function defines a callback that allows to auto tangle files on-save event,
 (add-hook 'org-mode-hook (lambda () (add-hook 'after-save-hook #'glz/org-babel-tangle-config)))
 #+end_src
 ** Reading pdfs in  Emacs
-pdf-tools in doom emacs seems to be working... out-of-the-box? 
+pdf-tools in doom emacs seems to be working... out-of-the-box?
+** Task Management
+*** Task States
+In org mode it is possible to customize the "TODO" keywords, and also define custom todo workflow.
+In this snippet I will define some custom todo items / todo states: 
+#+begin_src elisp
+; Here we define different sequences of "Task/Todos" and define a custom workflow
+
+(setq org-todo-keywords
+      '((sequence "TODO(t)" "|" "DONE(d)")
+        (sequence "REPORT(r)" "BUG(b)" "KNOWNCAUSE(k)" "|" "FIXED(f)")
+        (sequence "IDEA" "DISCUSSION" "FEASIBILITY_ANALYSIS" "|" "ABORTED" "ACCEPTED")
+        (sequence "|" "CANCELED(c)")))
+
+#+end_src
+** Latex Header blocks
+This part of the config is to setup latex with header packages, ignore headlines are a package that allows to introduce trees of the document that are not exported simply by using org-mode tags.
+Such tags can be :noexport: which prevents the entire tree and subtree not to be exported into the pdf (normally would put all the configuration part of the doc) :ignore instead allows the content of a tree or subtree to be exported but without the heading
+#+begin_src elisp
+(after! org
+  (use-package! ox-extra
+    :config
+    (ox-extras-activate '(latex-header-blocks ignore-headlines)))
+  )
+#+end_src
+In the following I setup the global latex configuration for Latex export
+#+begin_src elisp
+(after! org
+  ;; Import ox-latex to get org-latex-classes and other funcitonality
+  ;; for exporting to LaTeX from org
+  (use-package! ox-latex
+    :init
+    ;; code here will run immediately
+    :config
+    ;; code here will run after the package is loaded
+    (setq org-latex-pdf-process
+          '("pdflatex -interaction nonstopmode -output-directory %o %f"
+            "bibtex %b"
+            "pdflatex -interaction nonstopmode -output-directory %o %f"
+            "pdflatex -interaction nonstopmode -output-directory %o %f"))
+    (setq org-latex-with-hyperref nil) ;; stop org adding hypersetup{author..} to latex export
+    ;; (setq org-latex-prefer-user-labels t)
+
+    ;; deleted unwanted file extensions after latexMK
+    (setq org-latex-logfiles-extensions
+          (quote ("lof" "lot" "tex~" "aux" "idx" "log" "out" "toc" "nav" "snm" "vrb" "dvi" "fdb_latexmk" "blg" "brf" "fls" "entoc" "ps" "spl" "bbl" "xmpi" "run.xml" "bcf" "acn" "acr" "alg" "glg" "gls" "ist")))
+
+    (unless (boundp 'org-latex-classes)
+      (setq org-latex-classes nil)))
+
+#+end_src
 * Key bindings
 This section contians all the custom keybindings for the custom functions I develop / integrate in my workflow
 ** org-roam-insert-immediate
