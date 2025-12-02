@@ -18,8 +18,8 @@
   boot.kernelPackages = pkgs.linuxPackages_latest;
 
   boot.initrd.luks.devices."luks-58f51fba-fd89-4cae-99e3-e453154fdd8e".device = "/dev/disk/by-uuid/58f51fba-fd89-4cae-99e3-e453154fdd8e";
-  networking.hostName = "nixos"; # Define your hostname.
-  # networking.wireless.enable = true;  # Enables wireless support via wpa_supplicant.
+  networking.hostName = "getriebe"; # Define your hostname.
+  #networking.wireless.enable = true;  # Enables wireless support via wpa_supplicant.
 
   # Configure network proxy if necessary
   # networking.proxy.default = "http://user:password@proxy:port/";
@@ -27,7 +27,10 @@
 
   # Enable networking
   networking.networkmanager.enable = true;
+  networking.networkmanager.wifi.powersave = true;
 
+  # Setting up experimental flake feature 
+  nix.settings.experimental-features = ["nix-command" "flakes"];
   # Set your time zone.
   time.timeZone = "Europe/Rome";
 

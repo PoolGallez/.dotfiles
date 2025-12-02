@@ -12,8 +12,13 @@
 		nixosConfigurations = {
 			triskelion = lib.nixosSystem {
 				system = "x86_64-linux";
-				modules = [ ../hosts/triskelion/configuration.nix];
+				modules = [./hosts/triskelion/configuration.nix];
 			};
+			getriebe = lib.nixosSystem {
+				system = "x86_64-linux";
+				modules = [ ./hosts/getriebe/configuration.nix];
+			};
+
 		};
 
   	};
