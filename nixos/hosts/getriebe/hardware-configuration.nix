@@ -13,6 +13,14 @@
   boot.kernelModules = [ "kvm-amd" ];
   boot.extraModulePackages = [ ];
 
+  # Display rotation
+  boot.kernelParams = [
+      # The GPD Pocket 4 uses a tablet LTPS display, that is mounted rotated 90° counter-clockwise
+      "fbcon=rotate:1"
+      "video=eDP-1:panel_orientation=right_side_up"
+    ];
+
+
   fileSystems."/" =
     { device = "/dev/disk/by-uuid/65a0012d-8bfb-4680-889b-28d09aca13da";
       fsType = "ext4";
