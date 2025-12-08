@@ -10,6 +10,8 @@
       ../common/common.nix
       ./hardware-configuration.nix
       ../../de/plasma/plasma.nix
+      ../../apps/gaming/gaming.nix
+      ../../apps/comms/comms.nix
     ];
 
   # Bootloader.
@@ -47,79 +49,14 @@
     extraGroups = [ "networkmanager" "wheel" ];
     packages = with pkgs; [
       kdePackages.kate
-      discord
-      steam
-      steam-run # Allows FHS file hierarchy for steam games (Nix is not FHS compliant)
-      spotify
-      telegram-desktop
       emacs
     ];
   };
 
 
-  # git configuration
-  programs.git = {
-    enable = true; 
-#    userName = "Paolo Galletta";
-#    userEmail = "galletta.paolo98@gmail.com";
-  };
-  #steam options
-  programs.steam = {
-    enable = true;
-    remotePlay.openFirewall = true; # Open ports in the firewall for Steam Remote Play
-    dedicatedServer.openFirewall = true; # Open ports in the firewall for Source Dedicated Server
-  };
-
-  programs.steam.extraCompatPackages = with pkgs; [
-    proton-ge-bin # Enable proton compatibility for Windows games
-  ];
-
-  # Install firefox.
+    # Install firefox.
   programs.firefox.enable = true;
 
-  # Allowing steam to install its unfree packages
-  nixpkgs.config.allowUnfreePredicate = {pkg, lib}: builtins.elem (lib.getName pkg) [
-    "steam"
-    "steam-original"
-    "steam-unwrapped"
-    "steam-run"
-  ];
-
-  # List packages installed in system profile. To search, run:
-  # $ nix search wget
-  environment.systemPackages = with pkgs; [
-  #  vim # Do not forget to add an editor to edit configuration.nix! The Nano editor is also installed by default.
-  #  wget
-     neovim
-     git
-     openssh
-  ];
-
-  # Some programs need SUID wrappers, can be configured further or are
-  # started in user sessions.
-  # programs.mtr.enable = true;
-  # programs.gnupg.agent = {
-  #   enable = true;
-  #   enableSSHSupport = true;
-  # };
-
-  # List services that you want to enable:
-
-  # Enable the OpenSSH daemon.
-  # services.openssh.enable = true;
-
-  # Open ports in the firewall.
-  # networking.firewall.allowedTCPPorts = [ ... ];
-  # networking.firewall.allowedUDPPorts = [ ... ];
-  # Or disable the firewall altogether.
-  # networking.firewall.enable = false;
-
-  # This value determines the NixOS release from which the default
-  # settings for stateful data, like file locations and database versions
-  # on your system were taken. It‘s perfectly fine and recommended to leave
-  # this value at the release version of the first install of this system.
-  # Before changing this value read the documentation for this option
-  # (e.g. man configuration.nix or on https://nixos.org/nixos/options.html).
-  system.stateVersion = "25.05"; # Did you read the comment?
+ system.stateVersion = "25.05"; # Did you read the comment?
 
 }

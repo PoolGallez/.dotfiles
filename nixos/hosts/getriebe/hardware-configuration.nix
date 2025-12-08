@@ -24,6 +24,15 @@
   fileSystems."/" =
     { device = "/dev/disk/by-uuid/65a0012d-8bfb-4680-889b-28d09aca13da";
       fsType = "ext4";
+      options = [ 
+        # If you don't have this options attribute, it'll default to "defaults"
+        # boot options for fstab. Search up fstab mount options you can use
+        "users" # Allows any user to mount and unmount
+        "nofail" # Prevent system from failing if this drive doesn't mount
+        "x-gvfs-show" # Allows the mounted partition to be shown in the file explorer
+        "exec"
+      ];
+
     };
 
   boot.initrd.luks.devices."luks-f50ac571-51bd-497f-84d1-451ae72a5813".device = "/dev/disk/by-uuid/f50ac571-51bd-497f-84d1-451ae72a5813";

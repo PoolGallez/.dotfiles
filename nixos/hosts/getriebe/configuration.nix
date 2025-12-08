@@ -10,6 +10,8 @@
       ../common/common.nix
       ./hardware-configuration.nix
       ../../de/plasma/plasma.nix
+      ../../apps/gaming/gaming.nix
+      ../../apps/comms/comms.nix
     ];
 
   # Bootloader.
