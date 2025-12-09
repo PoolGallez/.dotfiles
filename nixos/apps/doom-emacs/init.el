@@ -1,1 +1,1 @@
-./init.el
+../../../doom-emacs/.config/doom/init.el

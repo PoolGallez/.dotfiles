@@ -1,1 +1,1 @@
-./packages.el
+../../../doom-emacs/.config/doom/packages.el
