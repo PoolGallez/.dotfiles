@@ -78,4 +78,10 @@
 
   # Let Home Manager install and manage itself.
   programs.home-manager.enable = true;
+
+  # installation of doom emacs 
+  programs.doom-emacs = {
+      enable = true;	
+      doomDir = "~/.dotfiles/doom-emacs/.config/doom/";
+  };
 }
