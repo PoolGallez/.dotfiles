@@ -18,13 +18,13 @@
         proton-ge-bin # Enable proton compatibility for Windows games
      ];
 
-    # Allowing steam to install its unfree packages
-    nixpkgs.config.allowUnfreePredicate = {pkg, lib}: builtins.elem (lib.getName pkg) [
-    "steam"
-    "steam-original"
-    "steam-unwrapped"
-    "steam-run"
-    ];
+     # Allowing steam to install its unfree packages
+     nixpkgs.config.allowUnfreePredicate = {pkg, lib}: builtins.elem (lib.getName pkg) [
+     "steam"
+     "steam-original"
+     "steam-unwrapped"
+     "steam-run"
+     ];
 
  
 }
