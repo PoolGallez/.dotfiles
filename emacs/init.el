@@ -14,10 +14,15 @@
 (setq-default indent-tabs-mode nil
 	      tab-width 2)
 
-;; Display line numbers in programming modes
-(add-hook 'prog-mode-hook #'display-line-numbers-mode)
-;; Display relative line numbers
-(setq display-line-numbers 'relative)
+(defun glz/prog-mode-configs ()
+  "Personal adjustments for programming modes"
+  ; Display line numbers
+  (display-line-numbers-mode)
+  ; Set them as relative numbers
+  (setq display-line-numbers 'relative))
+
+;; Add hook to all programming mode to satisfy my customizations
+(add-hook 'prog-mode-hook #'glz/prog-mode-configs)
 
 
 ; (set-face-attribute 'default nil :font "Fira Code Retina" :height 280)
@@ -151,7 +156,7 @@
 
   ;; Use visual line motions even outside of visual-line-mode buffers
   (evil-global-set-key 'motion "j" 'evil-next-visual-line)
-  (evil-global-set-key 'motion "k" 'evil-previous-visual-line)
+  (evil-global-set-key 'motion "k" 'evil-previous-visual-line) ; if you have lines wrapped around, pressing J K moves to next visual line and not next actual line 
 
   (evil-set-initial-state 'messages-buffer-mode 'normal)
   (evil-set-initial-state 'dashboard-mode 'normal))
@@ -166,4 +171,121 @@
  ;; If you edit it by hand, you could mess it up, so be careful.
  ;; Your init file should contain only one such instance.
  ;; If there is more than one, they won't work right.
- '(package-selected-packages nil))
+ '(package-selected-packages
+   '(all-the-icons counsel counsel-projectile doom-modeline doom-themes
+                   evil-collection evil-magit forge general helpful
+                   ivy-rich magit org-bullets projectile
+                   rainbow-delimiters)))
+
+;; Project tile for managing projects 
+(use-package projectile
+  :diminish projectile-mode
+  :config (projectile-mode)
+  :custom ((projectile-completion-system 'ivy)) ; Use ivy also in projectile
+  :bind-keymap
+  ("C-c p" . projectile-command-map)
+  ;:init
+  ;(when (file-directory-p "~/Projects/Code")
+  ;  (setq projectile-project-search-path '("~/Projects/Code")))
+  ;(setq projectile-switch-project-action #'projectile-dired))
+  )
+;; Integrate the better completion framework counsel and ivy into projectile
+(use-package counsel-projectile
+ :after projectile
+ :config
+ (counsel-projectile-mode 1))
+
+;; Magit git client
+(use-package magit
+  :commands (magit-status magit-get-current-branch)
+  :custom
+  (magit-display-buffer-function #'magit-display-buffer-same-window-except-diff-v1))
+
+;; To integrate issues, merge requests, ...
+(use-package forge)
+
+;; Org mode settings
+(defun glz/org-mode-setup ()
+  (org-indent-mode)             ; Appearence settings
+  (variable-pitch-mode 1)       ; 
+  (auto-fill-mode 0)
+  (visual-line-mode 1)
+  (setq evil-auto-indent nil))
+
+(use-package org
+  :hook (org-mode . glz/org-mode-setup)
+  :config
+  (setq org-ellipsis " ▾"
+        org-hide-emphasis-markers t))
+
+(use-package org-bullets
+  :after org
+  :hook (org-mode . org-bullets-mode)
+  :custom
+  (org-bullets-bullet-list '("◉" "○" "●" "○" "●" "○" "●")))
+
+;; Replace list hyphen with dot
+(font-lock-add-keywords 'org-mode
+                        '(("^ *\\([-]\\) "
+                          (0 (prog1 () (compose-region (match-beginning 1) (match-end 1) "•"))))))
+
+
+;(dolist (face '((org-level-1 . 1.2)
+;                (org-level-2 . 1.1)
+;                (org-level-3 . 1.05)
+;                (org-level-4 . 1.0)
+;                (org-level-5 . 1.1)
+;                (org-level-6 . 1.1)
+;                (org-level-7 . 1.1)
+;                (org-level-8 . 1.1)))
+;    (set-face-attribute (car face) nil :font "Cantarell" :weight 'regular :height (cdr face)))
+
+;; Make sure org-indent face is available
+(require 'org-indent)
+
+;; Ensure that anything that should be fixed-pitch in Org files appears that way
+(set-face-attribute 'org-block nil :foreground nil :inherit 'fixed-pitch)
+(set-face-attribute 'org-code nil   :inherit '(shadow fixed-pitch))
+(set-face-attribute 'org-indent nil :inherit '(org-hide fixed-pitch))
+(set-face-attribute 'org-verbatim nil :inherit '(shadow fixed-pitch))
+(set-face-attribute 'org-special-keyword nil :inherit '(font-lock-comment-face fixed-pitch))
+(set-face-attribute 'org-meta-line nil :inherit '(font-lock-comment-face fixed-pitch))
+(set-face-attribute 'org-checkbox nil :inherit 'fixed-pitch)
+
+;; Just appealing dashboard
+(use-package dashboard
+  :ensure t
+  :config
+  (dashboard-setup-startup-hook)
+  (setq initial-buffer-choice 'dashboard-open)
+  ;; Set the title
+  (setq dashboard-banner-logo-title "PG's Vault")
+  ;; Set the banner
+  (setq dashboard-startup-banner 'logo)
+  ;; Value can be:
+  ;;  - 'official which displays the official emacs logo.
+  ;;  - 'logo which displays an alternative emacs logo PNG or braille.
+  ;;  - 'logo-ansi-truecolor which displays an alternative emacs logo
+  ;;    using unicode block characters and ANSI escape sequences.
+  ;;  - 'logo-ansi-256color which displays an alternative emacs logo
+  ;;    using unicode block characters and ANSI escape sequences.
+  ;;  - 'logo-braille which displays an alternative emacs logo
+  ;;    using unicode braille characters.
+  ;;  - an integer which displays one of the text banners
+  ;;    (see dashboard-banners-directory files).
+  ;;  - a string that specifies a path for a custom banner
+  ;;    currently supported types are gif/image/text/xbm.
+  ;;  - a cons of 2 strings which specifies the path of an image to use
+  ;;    and other path of a text file to use if image isn't supported.
+  ;;    (cons "path/to/image/file/image.png" "path/to/text/file/text.txt").
+  ;;  - a list that can display an random banner,
+  ;;    supported values are: string (filepath), 'official, 'logo and integers.
+
+  ;; Content is not centered by default. To center, set
+  (setq dashboard-center-content t)
+  ;; vertically center content
+  (setq dashboard-vertically-center-content t)
+
+  ;; To disable shortcut "jump" indicators for each section, set
+  (setq dashboard-show-shortcuts nil)
+)
