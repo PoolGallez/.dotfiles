@@ -44,6 +44,11 @@
 (require 'use-package) ; Package manager
 (setq use-package-always-ensure t)
 
+
+(use-package doom-themes
+  :config
+  (load-theme 'doom-dracula t))
+
 ; Set of tools for better completion on emacs
 (use-package ivy
   :diminish                       ; Prevents to appear on the linemode
@@ -65,12 +70,6 @@
 
 (global-set-key (kbd "C-M-j") 'counsel-switch-buffer)
 
-
-;; Better completion with more details (function descriptions, ...)
-(use-package ivy-rich
-  :init
-  (ivy-rich-mode 1))
-
 ;; Better Emacs function search (fuzzy search, ...)
 (use-package counsel
   :bind (("M-x" . counsel-M-x)
@@ -84,15 +83,16 @@
 (use-package swiper)
 
 
+;; Better completion with more details (function descriptions, ...)
+(use-package ivy-rich
+  :init
+  (ivy-rich-mode 1))
+
 (use-package all-the-icons)
 (use-package doom-modeline
   :ensure t
   :init (doom-modeline-mode 1)
   :custom ((doom-modeline-height 15)))`
-
-(use-package doom-themes
-  :config
-  (load-theme 'doom-dracula t))
 
 (custom-set-variables
  ;; custom-set-variables was added by Custom.
@@ -161,3 +161,9 @@
   :after evil
   :config
   (evil-collection-init))
+(custom-set-variables
+ ;; custom-set-variables was added by Custom.
+ ;; If you edit it by hand, you could mess it up, so be careful.
+ ;; Your init file should contain only one such instance.
+ ;; If there is more than one, they won't work right.
+ '(package-selected-packages nil))
