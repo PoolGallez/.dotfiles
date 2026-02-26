@@ -175,7 +175,7 @@
    '(all-the-icons counsel counsel-projectile doom-modeline doom-themes
                    evil-collection evil-magit forge general helpful
                    ivy-rich magit org-bullets projectile
-                   rainbow-delimiters)))
+                   rainbow-delimiters visual-fill-column)))
 
 ;; Project tile for managing projects 
 (use-package projectile
@@ -222,7 +222,7 @@
   :after org
   :hook (org-mode . org-bullets-mode)
   :custom
-  (org-bullets-bullet-list '("◉" "○" "●" "○" "●" "○" "●")))
+  (org-bullets-bullet-list '("◉" "○" "●" "○" "●" "○" "●"))) ; Custom property lets yopu do key value pairs, the :config instead lets you put code inside, so you need to set properties with setq for instance
 
 ;; Replace list hyphen with dot
 (font-lock-add-keywords 'org-mode
@@ -230,7 +230,7 @@
                           (0 (prog1 () (compose-region (match-beginning 1) (match-end 1) "•"))))))
 
 
-;(dolist (face '((org-level-1 . 1.2)
+;(dolist (face '((org-level-1 . 1.2) ; This is somehow not working
 ;                (org-level-2 . 1.1)
 ;                (org-level-3 . 1.05)
 ;                (org-level-4 . 1.0)
@@ -251,6 +251,115 @@
 (set-face-attribute 'org-special-keyword nil :inherit '(font-lock-comment-face fixed-pitch))
 (set-face-attribute 'org-meta-line nil :inherit '(font-lock-comment-face fixed-pitch))
 (set-face-attribute 'org-checkbox nil :inherit 'fixed-pitch)
+
+(defun glz/org-mode-visual-fill ()
+  (setq visual-fill-column-width 100
+        visual-fill-column-center-text t)
+  (visual-fill-column-mode 1))
+
+(use-package visual-fill-column
+  :hook (org-mode . glz/org-mode-visual-fill))
+
+;; Org notes directories
+; (setq org-directory "~/Projects/Code/emacs-from-scratch/OrgFiles") Set uponce decided where to put stuff :)
+
+;; Org agenda 
+; (setq org-agenda-files '("Tasks.org" "Birthdays.org" )) Set u once decided where to put stuff :)
+
+(setq org-agenda-start-with-log-mode t) ; Show the log of when tasks have been completed in the agenda
+(setq org-log-done 'time) ; What to log when task is done (in this case, time)
+(setq org-log-into-drawer t) ; Add collapsible section for the logging properties
+
+; Org TODO states
+(setq org-todo-keywords
+  '((sequence "TODO(t)" "NEXT(n)" "|" "DONE(d!)")
+    (sequence "BACKLOG(b)" "PLAN(p)" "READY(r)" "ACTIVE(a)" "REVIEW(v)" "WAIT(w@/!)" "HOLD(h)" "|" "COMPLETED(c)" "CANC(k@)")))
+
+
+;; Org Agenda Custom views
+;; Configure custom agenda views
+(setq org-agenda-custom-commands
+  '(("d" "Dashboard"
+     ((agenda "" ((org-deadline-warning-days 7)))
+      (todo "NEXT"
+        ((org-agenda-overriding-header "Next Tasks")))
+      (tags-todo "agenda/ACTIVE" ((org-agenda-overriding-header "Active Projects")))))
+
+    ("n" "Next Tasks"
+     ((todo "NEXT"
+        ((org-agenda-overriding-header "Next Tasks")))))
+
+
+    ("W" "Work Tasks" tags-todo "+work")
+
+    ;; Low-effort next actions
+    ("e" tags-todo "+TODO=\"NEXT\"+Effort<15&+Effort>0"
+     ((org-agenda-overriding-header "Low Effort Tasks")
+      (org-agenda-max-todos 20)
+      (org-agenda-files org-agenda-files)))
+
+    ("w" "Workflow Status"
+     ((todo "WAIT"
+            ((org-agenda-overriding-header "Waiting on External")
+             (org-agenda-files org-agenda-files)))
+      (todo "REVIEW"
+            ((org-agenda-overriding-header "In Review")
+             (org-agenda-files org-agenda-files)))
+      (todo "PLAN"
+            ((org-agenda-overriding-header "In Planning")
+             (org-agenda-todo-list-sublevels nil)
+             (org-agenda-files org-agenda-files)))
+      (todo "BACKLOG"
+            ((org-agenda-overriding-header "Project Backlog")
+             (org-agenda-todo-list-sublevels nil)
+             (org-agenda-files org-agenda-files)))
+      (todo "READY"
+            ((org-agenda-overriding-header "Ready for Work")
+             (org-agenda-files org-agenda-files)))
+      (todo "ACTIVE"
+            ((org-agenda-overriding-header "Active Projects")
+             (org-agenda-files org-agenda-files)))
+      (todo "COMPLETED"
+            ((org-agenda-overriding-header "Completed Projects")
+             (org-agenda-files org-agenda-files)))
+      (todo "CANC"
+            ((org-agenda-overriding-header "Cancelled Projects")
+             (org-agenda-files org-agenda-files)))))))
+
+;; Refiling (move stuff from one heading to another (possibly in another file)
+(setq org-refile-targets
+      '(("Archive.org" :maxlevel . 1)))
+
+;; Save Org buffers after refiling!
+(advice-add 'org-refile :after 'org-save-all-org-buffers)
+
+; Taken from Systems crafters, please adapt it to needs and check the docu
+(setq org-capture-templates
+  `(("t" "Tasks / Projects")
+    ("tt" "Task" entry (file+olp "~/Projects/Code/emacs-from-scratch/OrgFiles/Tasks.org" "Inbox")
+         "* TODO %?\n  %U\n  %a\n  %i" :empty-lines 1)
+    ("ts" "Clocked Entry Subtask" entry (clock)
+         "* TODO %?\n  %U\n  %a\n  %i" :empty-lines 1)
+
+    ("j" "Journal Entries")
+    ("jj" "Journal" entry
+         (file+olp+datetree "~/Projects/Code/emacs-from-scratch/OrgFiles/Journal.org")
+         "\n* %<%I:%M %p> - Journal :journal:\n\n%?\n\n"
+         :clock-in :clock-resume
+         :empty-lines 1)
+    ("jm" "Meeting" entry
+         (file+olp+datetree "~/Projects/Code/emacs-from-scratch/OrgFiles/Journal.org")
+         "* %<%I:%M %p> - %a :meetings:\n\n%?\n\n"
+         :clock-in :clock-resume
+         :empty-lines 1)
+
+    ("w" "Workflows")
+    ("m" "Metrics Capture")
+    ))
+
+;; Defining global keymap for entries in the capture (makes fast to access direct captures)
+(define-key global-map (kbd "C-c j")
+  (lambda () (interactive) (org-capture nil "j")))
 
 ;; Just appealing dashboard
 (use-package dashboard
@@ -289,3 +398,5 @@
   ;; To disable shortcut "jump" indicators for each section, set
   (setq dashboard-show-shortcuts nil)
 )
+
+
