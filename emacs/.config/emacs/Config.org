@@ -6,7 +6,6 @@
 
 #+begin_src emacs-lisp
   (setq inhibit-startup-message t)
-
   (scroll-bar-mode -1)        ; Disable visible scrollbar
   (tool-bar-mode -1)          ; Disable the toolbar
   (tooltip-mode -1)           ; Disable tooltips
@@ -286,12 +285,7 @@
     :config (projectile-mode)
     :custom ((projectile-completion-system 'ivy)) ; Use ivy also in projectile
     :bind-keymap
-    ("C-c p" . projectile-command-map)
-    ;:init
-    ;(when (file-directory-p "~/Projects/Code")
-    ;  (setq projectile-project-search-path '("~/Projects/Code")))
-    ;(setq projectile-switch-project-action #'projectile-dired))
-    )
+    ("C-c p" . projectile-command-map))
   ;; Integrate the better completion framework counsel and ivy into projectile
   (use-package counsel-projectile
    :after projectile
@@ -318,6 +312,18 @@
 #+end_src
 
 * Org mode
+** Automatic Tangle
+#+begin_src emacs-lisp
+;; Automatically tangle our Emacs.org config file when we save it
+(defun glz/org-babel-tangle-config ()
+  (when (string-equal (buffer-file-name)
+                      (expand-file-name "~/.dotfiles/emacs/.config/emacs/Config.org"))
+    ;; Dynamic scoping to the rescue
+    (let ((org-confirm-babel-evaluate nil))
+      (org-babel-tangle))))
+
+(add-hook 'org-mode-hook (lambda () (add-hook 'after-save-hook #'glz/org-babel-tangle-config)))
+#+end_src
 ** UI Basic UI settings
 #+begin_src emacs-lisp
   ;; Org mode settings
@@ -396,7 +402,7 @@
    ; (setq org-directory "~/Projects/Code/emacs-from-scratch/OrgFiles") Set uponce decided where to put stuff :)
 
    ;; Org agenda 
-   ; (setq org-agenda-files '("Tasks.org" "Birthdays.org" )) Set u once decided where to put stuff :)
+   ; (setq org-agenda-files '("Tasks.org" "Birthdays.org" )) Set u once decided where to put stuff 
 
 #+end_src
 
@@ -472,7 +478,7 @@
 *** Refiling (moving headings / tasks from one file to another)
 #+begin_src emacs-lisp
 
-  ;; Refiling (move stuff from one heading to another (possibly in another file)
+  ;; Refiling move stuff from one heading to another possibly in another file
   (setq org-refile-targets
         '(("Archive.org" :maxlevel . 1)))
 
@@ -480,7 +486,7 @@
   (advice-add 'org-refile :after 'org-save-all-org-buffers)
 
   #+end_src
-
+  
 ** Capture templates
   
   #+begin_src emacs-lisp

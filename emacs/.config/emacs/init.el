@@ -1,5 +1,4 @@
 (setq inhibit-startup-message t)
-
 (scroll-bar-mode -1)        ; Disable visible scrollbar
 (tool-bar-mode -1)          ; Disable the toolbar
 (tooltip-mode -1)           ; Disable tooltips
@@ -214,12 +213,7 @@
   :config (projectile-mode)
   :custom ((projectile-completion-system 'ivy)) ; Use ivy also in projectile
   :bind-keymap
-  ("C-c p" . projectile-command-map)
-  ;:init
-  ;(when (file-directory-p "~/Projects/Code")
-  ;  (setq projectile-project-search-path '("~/Projects/Code")))
-  ;(setq projectile-switch-project-action #'projectile-dired))
-  )
+  ("C-c p" . projectile-command-map))
 ;; Integrate the better completion framework counsel and ivy into projectile
 (use-package counsel-projectile
  :after projectile
@@ -234,6 +228,16 @@
 
 ;; To integrate issues, merge requests, ...
 (use-package forge)
+
+;; Automatically tangle our Emacs.org config file when we save it
+(defun glz/org-babel-tangle-config ()
+  (when (string-equal (buffer-file-name)
+                      (expand-file-name "~/.dotfiles/emacs/.config/emacs/Config.org"))
+    ;; Dynamic scoping to the rescue
+    (let ((org-confirm-babel-evaluate nil))
+      (org-babel-tangle))))
+
+(add-hook 'org-mode-hook (lambda () (add-hook 'after-save-hook #'glz/org-babel-tangle-config)))
 
 ;; Org mode settings
 (defun glz/org-mode-setup ()
@@ -302,7 +306,7 @@
 ; (setq org-directory "~/Projects/Code/emacs-from-scratch/OrgFiles") Set uponce decided where to put stuff :)
 
 ;; Org agenda 
-; (setq org-agenda-files '("Tasks.org" "Birthdays.org" )) Set u once decided where to put stuff :)
+; (setq org-agenda-files '("Tasks.org" "Birthdays.org" )) Set u once decided where to put stuff
 
 (setq org-agenda-start-with-log-mode t) ; Show the log of when tasks have been completed in the agenda
 (setq org-log-done 'time) ; What to log when task is done (in this case, time)
@@ -362,7 +366,7 @@
   '((sequence "TODO(t)" "NEXT(n)" "|" "DONE(d!)")
     (sequence "BACKLOG(b)" "PLAN(p)" "READY(r)" "ACTIVE(a)" "REVIEW(v)" "WAIT(w@/!)" "HOLD(h)" "|" "COMPLETED(c)" "CANC(k@)")))
 
-;; Refiling (move stuff from one heading to another (possibly in another file)
+;; Refiling move stuff from one heading to another possibly in another file
 (setq org-refile-targets
       '(("Archive.org" :maxlevel . 1)))
 
