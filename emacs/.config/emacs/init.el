@@ -24,12 +24,48 @@
 ;; Add hook to all programming mode to satisfy my customizations
 (add-hook 'prog-mode-hook #'glz/prog-mode-configs)
 
+;; Just appealing dashboard
+(use-package dashboard
+  :ensure t
+  :config
+  (dashboard-setup-startup-hook)
+  (setq initial-buffer-choice 'dashboard-open)
+  ;; Set the title
+  (setq dashboard-banner-logo-title "PG's Vault")
+  ;; Set the banner
+  (setq dashboard-startup-banner 'logo)
+  ;; Value can be:
+  ;;  - 'official which displays the official emacs logo.
+  ;;  - 'logo which displays an alternative emacs logo PNG or braille.
+  ;;  - 'logo-ansi-truecolor which displays an alternative emacs logo
+  ;;    using unicode block characters and ANSI escape sequences.
+  ;;  - 'logo-ansi-256color which displays an alternative emacs logo
+  ;;    using unicode block characters and ANSI escape sequences.
+  ;;  - 'logo-braille which displays an alternative emacs logo
+  ;;    using unicode braille characters.
+  ;;  - an integer which displays one of the text banners
+  ;;    (see dashboard-banners-directory files).
+  ;;  - a string that specifies a path for a custom banner
+  ;;    currently supported types are gif/image/text/xbm.
+  ;;  - a cons of 2 strings which specifies the path of an image to use
+  ;;    and other path of a text file to use if image isn't supported.
+  ;;    (cons "path/to/image/file/image.png" "path/to/text/file/text.txt").
+  ;;  - a list that can display an random banner,
+  ;;    supported values are: string (filepath), 'official, 'logo and integers.
 
-; (set-face-attribute 'default nil :font "Fira Code Retina" :height 280)
+  ;; Content is not centered by default. To center, set
+  (setq dashboard-center-content t)
+  ;; vertically center content
+  (setq dashboard-vertically-center-content t)
 
+  ;; To disable shortcut "jump" indicators for each section, set
+  (setq dashboard-show-shortcuts nil)
+)
 
 ;; Make ESC quit prompts instead of counting as chord
 (global-set-key (kbd "<escape>") 'keyboard-escape-quit)
+
+(global-set-key (kbd "C-M-j") 'counsel-switch-buffer) ; use counsel instead of default engine to switch buffers
 
 ;; Initialize package sources
 (require 'package)
@@ -37,7 +73,6 @@
 (setq package-archives '(("melpa" . "https://melpa.org/packages/")
                          ("org" . "https://orgmode.org/elpa/")
                          ("elpa" . "https://elpa.gnu.org/packages/")))
-
 (package-initialize)
 (unless package-archive-contents
  (package-refresh-contents))
@@ -48,7 +83,6 @@
 
 (require 'use-package) ; Package manager
 (setq use-package-always-ensure t)
-
 
 (use-package doom-themes
   :config
@@ -73,8 +107,6 @@
   :config
   (ivy-mode 1))
 
-(global-set-key (kbd "C-M-j") 'counsel-switch-buffer)
-
 ;; Better Emacs function search (fuzzy search, ...)
 (use-package counsel
   :bind (("M-x" . counsel-M-x)
@@ -86,7 +118,6 @@
   (setq ivy-initial-inputs-alist nil)) ; Remove the starting^
 
 (use-package swiper)
-
 
 ;; Better completion with more details (function descriptions, ...)
 (use-package ivy-rich
@@ -113,10 +144,6 @@
  ;; If there is more than one, they won't work right.
  )
 
-;; Color parenthesis
-(use-package rainbow-delimiters
-  :hook (prog-mode . rainbow-delimiters-mode)) 
-
 ;; Helper for the key bindings
 (use-package which-key
   :init (which-key-mode)
@@ -135,6 +162,10 @@
   ([remap describe-command] . helpful-command)
   ([remap describe-variable] . counsel-describe-variable)
   ([remap describe-key] . helpful-key))
+
+;; Color parenthesis
+(use-package rainbow-delimiters
+  :hook (prog-mode . rainbow-delimiters-mode))
 
 ;; General for unified way of defining keymaps (with additional features)
 (use-package general
@@ -215,7 +246,7 @@
 (use-package org
   :hook (org-mode . glz/org-mode-setup)
   :config
-  (setq org-ellipsis " ▾"
+  (setq org-ellipsis " ▾" ; Substitute the "..." with this symbol
         org-hide-emphasis-markers t))
 
 (use-package org-bullets
@@ -260,6 +291,13 @@
 (use-package visual-fill-column
   :hook (org-mode . glz/org-mode-visual-fill))
 
+; Org Tempo to have snippets
+(require 'org-tempo)
+
+(add-to-list 'org-structure-template-alist '("sh" . "src shell"))
+(add-to-list 'org-structure-template-alist '("el" . "src emacs-lisp"))
+(add-to-list 'org-structure-template-alist '("py" . "src python"))
+
 ;; Org notes directories
 ; (setq org-directory "~/Projects/Code/emacs-from-scratch/OrgFiles") Set uponce decided where to put stuff :)
 
@@ -269,13 +307,6 @@
 (setq org-agenda-start-with-log-mode t) ; Show the log of when tasks have been completed in the agenda
 (setq org-log-done 'time) ; What to log when task is done (in this case, time)
 (setq org-log-into-drawer t) ; Add collapsible section for the logging properties
-
-; Org TODO states
-(setq org-todo-keywords
-  '((sequence "TODO(t)" "NEXT(n)" "|" "DONE(d!)")
-    (sequence "BACKLOG(b)" "PLAN(p)" "READY(r)" "ACTIVE(a)" "REVIEW(v)" "WAIT(w@/!)" "HOLD(h)" "|" "COMPLETED(c)" "CANC(k@)")))
-
-
 ;; Org Agenda Custom views
 ;; Configure custom agenda views
 (setq org-agenda-custom-commands
@@ -326,6 +357,11 @@
             ((org-agenda-overriding-header "Cancelled Projects")
              (org-agenda-files org-agenda-files)))))))
 
+; Org TODO states
+(setq org-todo-keywords
+  '((sequence "TODO(t)" "NEXT(n)" "|" "DONE(d!)")
+    (sequence "BACKLOG(b)" "PLAN(p)" "READY(r)" "ACTIVE(a)" "REVIEW(v)" "WAIT(w@/!)" "HOLD(h)" "|" "COMPLETED(c)" "CANC(k@)")))
+
 ;; Refiling (move stuff from one heading to another (possibly in another file)
 (setq org-refile-targets
       '(("Archive.org" :maxlevel . 1)))
@@ -360,43 +396,3 @@
 ;; Defining global keymap for entries in the capture (makes fast to access direct captures)
 (define-key global-map (kbd "C-c j")
   (lambda () (interactive) (org-capture nil "j")))
-
-;; Just appealing dashboard
-(use-package dashboard
-  :ensure t
-  :config
-  (dashboard-setup-startup-hook)
-  (setq initial-buffer-choice 'dashboard-open)
-  ;; Set the title
-  (setq dashboard-banner-logo-title "PG's Vault")
-  ;; Set the banner
-  (setq dashboard-startup-banner 'logo)
-  ;; Value can be:
-  ;;  - 'official which displays the official emacs logo.
-  ;;  - 'logo which displays an alternative emacs logo PNG or braille.
-  ;;  - 'logo-ansi-truecolor which displays an alternative emacs logo
-  ;;    using unicode block characters and ANSI escape sequences.
-  ;;  - 'logo-ansi-256color which displays an alternative emacs logo
-  ;;    using unicode block characters and ANSI escape sequences.
-  ;;  - 'logo-braille which displays an alternative emacs logo
-  ;;    using unicode braille characters.
-  ;;  - an integer which displays one of the text banners
-  ;;    (see dashboard-banners-directory files).
-  ;;  - a string that specifies a path for a custom banner
-  ;;    currently supported types are gif/image/text/xbm.
-  ;;  - a cons of 2 strings which specifies the path of an image to use
-  ;;    and other path of a text file to use if image isn't supported.
-  ;;    (cons "path/to/image/file/image.png" "path/to/text/file/text.txt").
-  ;;  - a list that can display an random banner,
-  ;;    supported values are: string (filepath), 'official, 'logo and integers.
-
-  ;; Content is not centered by default. To center, set
-  (setq dashboard-center-content t)
-  ;; vertically center content
-  (setq dashboard-vertically-center-content t)
-
-  ;; To disable shortcut "jump" indicators for each section, set
-  (setq dashboard-show-shortcuts nil)
-)
-
-
