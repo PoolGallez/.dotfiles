@@ -288,7 +288,7 @@
 (set-face-attribute 'org-checkbox nil :inherit 'fixed-pitch)
 
 (defun glz/org-mode-visual-fill ()
-  (setq visual-fill-column-width 100
+  (setq visual-fill-column-width  150
         visual-fill-column-center-text t)
   (visual-fill-column-mode 1))
 
@@ -303,10 +303,10 @@
 (add-to-list 'org-structure-template-alist '("py" . "src python"))
 
 ;; Org notes directories
-; (setq org-directory "~/Projects/Code/emacs-from-scratch/OrgFiles") Set uponce decided where to put stuff :)
+(setq org-directory "/home/pool/Documents/PKDB_Org/") 
 
-;; Org agenda 
-; (setq org-agenda-files '("Tasks.org" "Birthdays.org" )) Set u once decided where to put stuff
+ ;; Org agenda 
+(setq org-agenda-files '("Tasks.org" "Birthdays.org" "Calendar.org"))
 
 (setq org-agenda-start-with-log-mode t) ; Show the log of when tasks have been completed in the agenda
 (setq org-log-done 'time) ; What to log when task is done (in this case, time)
@@ -364,7 +364,7 @@
 ; Org TODO states
 (setq org-todo-keywords
   '((sequence "TODO(t)" "NEXT(n)" "|" "DONE(d!)")
-    (sequence "BACKLOG(b)" "PLAN(p)" "READY(r)" "ACTIVE(a)" "REVIEW(v)" "WAIT(w@/!)" "HOLD(h)" "|" "COMPLETED(c)" "CANC(k@)")))
+    (sequence "IDEA(i)" "DISCUSSION(d)" "ANALYSIS(a)" "IN WORK(w)" "|" "DONE(d!)" "CANCELLED(c!)")))
 
 ;; Refiling move stuff from one heading to another possibly in another file
 (setq org-refile-targets
