@@ -3,7 +3,6 @@
 #+PROPERTY: header-args:emacs-lisp :tangle ./init.el
 * General UI
 ** Basic UI inhibitions
-
 #+begin_src emacs-lisp
   (setq inhibit-startup-message t)
   (scroll-bar-mode -1)        ; Disable visible scrollbar
@@ -20,7 +19,6 @@
   (setq-default indent-tabs-mode nil
   	      tab-width 2)
 #+end_src
-
 ** Line numbers in programming mode
 #+begin_src emacs-lisp
   (defun glz/prog-mode-configs ()
@@ -33,7 +31,6 @@
   ;; Add hook to all programming mode to satisfy my customizations
   (add-hook 'prog-mode-hook #'glz/prog-mode-configs)
 #+end_src
-
 ** Fonts
 #+begin_src emacs-lisp
 
@@ -42,7 +39,6 @@
 #+end_src emacs-lisp
 ** Dashboard
 #+begin_src emacs-lisp
-
     ;; Just appealing dashboard
     (use-package dashboard
       :ensure t
@@ -81,14 +77,11 @@
       (setq dashboard-show-shortcuts nil)
     )
 #+end_src
-
 * Keybindings
 ** Global Keybindings
 #+begin_src emacs-lisp
   ;; Make ESC quit prompts instead of counting as chord
   (global-set-key (kbd "<escape>") 'keyboard-escape-quit)
-
-  (global-set-key (kbd "C-M-j") 'counsel-switch-buffer) ; use counsel instead of default engine to switch buffers
 #+end_src
 ** General (Advanced keymapping)
 #+begin_src emacs-lisp
@@ -103,13 +96,19 @@
       :keymaps 'override
       :prefix "SPC"
       :global-prefix "C-SPC")
-
     (glz/leader-key
-     "." '("Find file in current directory" . counsel-find-file)
-    ))
-
+      ; Fast shortcuts
+      "." '("Find file in current directory" . counsel-find-file)
+      ; Git group
+      "g" '(:ignore t :which-key "git"); how to define groups of keymaps, not bound directly to commands
+      "gg" '("Open Magit" . magit-status)
+      ; Projectile group
+      "p" '(:package projectile :keymap projectile-command-map :which-key "projectile") ; How to assign a prefix to existin map      ; Buffers group
+      "b" '(:ignore t :which-key "buffers")
+      "bb" '("Switch buffers" . counsel-switch-buffer)
+      "h" '(:package help :keymap help-map :which-key "help") ; How to assign a prefix to existin map      ; Buffers group
+      ))
 #+end_src
-
 * Package management settings
 #+begin_src emacs-lisp
   ;; Initialize package sources
@@ -289,18 +288,19 @@
 
  #+begin_src emacs-lisp
 
-  ;; Project tile for managing projects 
-  (use-package projectile
-    :diminish projectile-mode
-    :config (projectile-mode)
-    :custom ((projectile-completion-system 'ivy)) ; Use ivy also in projectile
-    :bind-keymap
-    ("C-c p" . projectile-command-map))
-  ;; Integrate the better completion framework counsel and ivy into projectile
-  (use-package counsel-projectile
-   :after projectile
-   :config
-   (counsel-projectile-mode 1))
+     ;; Project tile for managing projects 
+     (use-package projectile
+       :diminish projectile-mode
+       :config (projectile-mode)
+       :custom ((projectile-completion-system 'ivy)) ; Use ivy also in projectile
+       ;:bind-keymap
+       ;("C-c p" . projectile-command-map)
+       )
+     ;; Integrate the better completion framework counsel and ivy into projectile
+     (use-package counsel-projectile
+      :after projectile
+      :config
+      (counsel-projectile-mode 1))
 
 #+end_src
 
@@ -319,6 +319,17 @@
   ;; To integrate issues, merge requests, ...
   (use-package forge)
 
+#+end_src
+
+** Ediff settings
+#+begin_src emacs-lisp
+  (setq ediff-keep-variants nil)
+  (setq ediff-make-buffers-readonly-at-startup nil)
+  (setq ediff-merge-revisions-with-ancestor t)
+  (setq ediff-show-clashes-only t)
+
+  (setq ediff-split-window-function 'split-window-horizontally)
+  (setq ediff-window-setup-function 'ediff-setup-windows-plain)
 #+end_src
 
 * Org mode

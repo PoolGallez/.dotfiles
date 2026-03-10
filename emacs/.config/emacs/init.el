@@ -64,8 +64,6 @@
 ;; Make ESC quit prompts instead of counting as chord
 (global-set-key (kbd "<escape>") 'keyboard-escape-quit)
 
-(global-set-key (kbd "C-M-j") 'counsel-switch-buffer) ; use counsel instead of default engine to switch buffers
-
 ;; General for unified way of defining keymaps (with additional features)
 (use-package general
   :after evil
@@ -77,10 +75,18 @@
     :keymaps 'override
     :prefix "SPC"
     :global-prefix "C-SPC")
-
   (glz/leader-key
-   "." '("Find file in current directory" . counsel-find-file)
-  ))
+    ; Fast shortcuts
+    "." '("Find file in current directory" . counsel-find-file)
+    ; Git group
+    "g" '(:ignore t :which-key "git"); how to define groups of keymaps, not bound directly to commands
+    "gg" '("Open Magit" . magit-status)
+    ; Projectile group
+    "p" '(:package projectile :keymap projectile-command-map :which-key "projectile") ; How to assign a prefix to existin map      ; Buffers group
+    "b" '(:ignore t :which-key "buffers")
+    "bb" '("Switch buffers" . counsel-switch-buffer)
+    "h" '(:package help :keymap help-map :which-key "help") ; How to assign a prefix to existin map      ; Buffers group
+    ))
 
 ;; Initialize package sources
 (require 'package)
@@ -223,8 +229,9 @@
   :diminish projectile-mode
   :config (projectile-mode)
   :custom ((projectile-completion-system 'ivy)) ; Use ivy also in projectile
-  :bind-keymap
-  ("C-c p" . projectile-command-map))
+  ;:bind-keymap
+  ;("C-c p" . projectile-command-map)
+  )
 ;; Integrate the better completion framework counsel and ivy into projectile
 (use-package counsel-projectile
  :after projectile
@@ -239,6 +246,14 @@
 
 ;; To integrate issues, merge requests, ...
 (use-package forge)
+
+(setq ediff-keep-variants nil)
+(setq ediff-make-buffers-readonly-at-startup nil)
+(setq ediff-merge-revisions-with-ancestor t)
+(setq ediff-show-clashes-only t)
+
+(setq ediff-split-window-function 'split-window-horizontally)
+(setq ediff-window-setup-function 'ediff-setup-windows-plain)
 
 ;; Automatically tangle our Emacs.org config file when we save it
 (defun glz/org-babel-tangle-config ()
