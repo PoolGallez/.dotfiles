@@ -66,6 +66,22 @@
 
 (global-set-key (kbd "C-M-j") 'counsel-switch-buffer) ; use counsel instead of default engine to switch buffers
 
+;; General for unified way of defining keymaps (with additional features)
+(use-package general
+  :after evil
+  :config
+  (general-evil-setup t)
+  (general-auto-unbind-keys)
+  (general-create-definer glz/leader-key
+    :states '(normal insert visual emacs)
+    :keymaps 'override
+    :prefix "SPC"
+    :global-prefix "C-SPC")
+
+  (glz/leader-key
+   "." '("Find file in current directory" . counsel-find-file)
+  ))
+
 ;; Initialize package sources
 (require 'package)
 
@@ -165,11 +181,6 @@
 ;; Color parenthesis
 (use-package rainbow-delimiters
   :hook (prog-mode . rainbow-delimiters-mode))
-
-;; General for unified way of defining keymaps (with additional features)
-(use-package general
-  :config
-  (general-evil-setup t))
 
 ;; Going evil
 (use-package evil

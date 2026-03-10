@@ -82,13 +82,32 @@
     )
 #+end_src
 
-* Keymaps
-** Global Keymaps
+* Keybindings
+** Global Keybindings
 #+begin_src emacs-lisp
   ;; Make ESC quit prompts instead of counting as chord
   (global-set-key (kbd "<escape>") 'keyboard-escape-quit)
 
   (global-set-key (kbd "C-M-j") 'counsel-switch-buffer) ; use counsel instead of default engine to switch buffers
+#+end_src
+** General (Advanced keymapping)
+#+begin_src emacs-lisp
+  ;; General for unified way of defining keymaps (with additional features)
+  (use-package general
+    :after evil
+    :config
+    (general-evil-setup t)
+    (general-auto-unbind-keys)
+    (general-create-definer glz/leader-key
+      :states '(normal insert visual emacs)
+      :keymaps 'override
+      :prefix "SPC"
+      :global-prefix "C-SPC")
+
+    (glz/leader-key
+     "." '("Find file in current directory" . counsel-find-file)
+    ))
+
 #+end_src
 
 * Package management settings
@@ -223,15 +242,6 @@
   ;; Color parenthesis
   (use-package rainbow-delimiters
     :hook (prog-mode . rainbow-delimiters-mode)) 
-
-#+end_src
-
-** General (Advanced keymapping)
-#+begin_src emacs-lisp
-  ;; General for unified way of defining keymaps (with additional features)
-  (use-package general
-    :config
-    (general-evil-setup t))
 
 #+end_src
 
