@@ -11,7 +11,7 @@
       git
       openssh
       discord
-
+      signal-desktop 
   ];
 
   # git configuration
