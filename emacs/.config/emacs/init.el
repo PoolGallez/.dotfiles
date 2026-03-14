@@ -1,17 +1,18 @@
 (setq inhibit-startup-message t)
-(scroll-bar-mode -1)        ; Disable visible scrollbar
-(tool-bar-mode -1)          ; Disable the toolbar
-(tooltip-mode -1)           ; Disable tooltips
-(set-fringe-mode 10)        ; Give some breathing room
+  (scroll-bar-mode -1)        ; Disable visible scrollbar
+  (tool-bar-mode -1)          ; Disable the toolbar
+  (tooltip-mode -1)           ; Disable tooltips
+  (set-fringe-mode 10)        ; Give some breathing room
 
-(menu-bar-mode -1)            ; Disable the menu bar
+  (menu-bar-mode -1)            ; Disable the menu bar
 
 
-(column-number-mode 1)         ;; Show column number on mode line
+  (column-number-mode 1)         ;; Show column number on mode line
 
-;; Tabs to spaces
-(setq-default indent-tabs-mode nil
-	      tab-width 2)
+  ;; Tabs to spaces
+  (setq-default indent-tabs-mode nil
+  	      tab-width 2)
+(setq visible-bell 1)
 
 (defun glz/prog-mode-configs ()
   "Personal adjustments for programming modes"
@@ -22,44 +23,6 @@
 
 ;; Add hook to all programming mode to satisfy my customizations
 (add-hook 'prog-mode-hook #'glz/prog-mode-configs)
-
-;; Just appealing dashboard
-(use-package dashboard
-  :ensure t
-  :config
-  (dashboard-setup-startup-hook)
-  (setq initial-buffer-choice 'dashboard-open)
-  ;; Set the title
-  (setq dashboard-banner-logo-title "PG's Vault")
-  ;; Set the banner
-  (setq dashboard-startup-banner 'logo)
-  ;; Value can be:
-  ;;  - 'official which displays the official emacs logo.
-  ;;  - 'logo which displays an alternative emacs logo PNG or braille.
-  ;;  - 'logo-ansi-truecolor which displays an alternative emacs logo
-  ;;    using unicode block characters and ANSI escape sequences.
-  ;;  - 'logo-ansi-256color which displays an alternative emacs logo
-  ;;    using unicode block characters and ANSI escape sequences.
-  ;;  - 'logo-braille which displays an alternative emacs logo
-  ;;    using unicode braille characters.
-  ;;  - an integer which displays one of the text banners
-  ;;    (see dashboard-banners-directory files).
-  ;;  - a string that specifies a path for a custom banner
-  ;;    currently supported types are gif/image/text/xbm.
-  ;;  - a cons of 2 strings which specifies the path of an image to use
-  ;;    and other path of a text file to use if image isn't supported.
-  ;;    (cons "path/to/image/file/image.png" "path/to/text/file/text.txt").
-  ;;  - a list that can display an random banner,
-  ;;    supported values are: string (filepath), 'official, 'logo and integers.
-
-  ;; Content is not centered by default. To center, set
-  (setq dashboard-center-content t)
-  ;; vertically center content
-  (setq dashboard-vertically-center-content t)
-
-  ;; To disable shortcut "jump" indicators for each section, set
-  (setq dashboard-show-shortcuts nil)
-)
 
 ;; Make ESC quit prompts instead of counting as chord
 (global-set-key (kbd "<escape>") 'keyboard-escape-quit)

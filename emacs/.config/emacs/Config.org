@@ -18,6 +18,7 @@
   ;; Tabs to spaces
   (setq-default indent-tabs-mode nil
   	      tab-width 2)
+(setq visible-bell 1)
 #+end_src
 ** Line numbers in programming mode
 #+begin_src emacs-lisp
@@ -37,46 +38,6 @@
   ; (set-face-attribute 'default nil :font "Fira Code Retina" :height 280)
 
 #+end_src emacs-lisp
-** Dashboard
-#+begin_src emacs-lisp
-    ;; Just appealing dashboard
-    (use-package dashboard
-      :ensure t
-      :config
-      (dashboard-setup-startup-hook)
-      (setq initial-buffer-choice 'dashboard-open)
-      ;; Set the title
-      (setq dashboard-banner-logo-title "PG's Vault")
-      ;; Set the banner
-      (setq dashboard-startup-banner 'logo)
-      ;; Value can be:
-      ;;  - 'official which displays the official emacs logo.
-      ;;  - 'logo which displays an alternative emacs logo PNG or braille.
-      ;;  - 'logo-ansi-truecolor which displays an alternative emacs logo
-      ;;    using unicode block characters and ANSI escape sequences.
-      ;;  - 'logo-ansi-256color which displays an alternative emacs logo
-      ;;    using unicode block characters and ANSI escape sequences.
-      ;;  - 'logo-braille which displays an alternative emacs logo
-      ;;    using unicode braille characters.
-      ;;  - an integer which displays one of the text banners
-      ;;    (see dashboard-banners-directory files).
-      ;;  - a string that specifies a path for a custom banner
-      ;;    currently supported types are gif/image/text/xbm.
-      ;;  - a cons of 2 strings which specifies the path of an image to use
-      ;;    and other path of a text file to use if image isn't supported.
-      ;;    (cons "path/to/image/file/image.png" "path/to/text/file/text.txt").
-      ;;  - a list that can display an random banner,
-      ;;    supported values are: string (filepath), 'official, 'logo and integers.
-
-      ;; Content is not centered by default. To center, set
-      (setq dashboard-center-content t)
-      ;; vertically center content
-      (setq dashboard-vertically-center-content t)
-
-      ;; To disable shortcut "jump" indicators for each section, set
-      (setq dashboard-show-shortcuts nil)
-    )
-#+end_src
 * Keybindings
 ** Global Keybindings
 #+begin_src emacs-lisp
