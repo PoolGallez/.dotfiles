@@ -54,18 +54,7 @@
 
   ; (set-face-attribute 'default nil :font "Fira Code Retina" :height 280)
 
-#+end_src emacs-lisp
-* General Config
-** Symlinks
-#+begin_src emacs-lisp
-(setq vc-follow-symlinks t)
-(setq find-file-suppress-same-file-warnings t)
-#+end_src
-** Custom file
-#+begin_src emacs-lisp
-(setq custom-file (expand-file-name (concat user-emacs-directory "customs.el")))
-(load custom-file)
-#+end_src
+  #+end_src emacs-lisp
 * Keybindings
 ** Global Keybindings
 #+begin_src emacs-lisp
@@ -515,7 +504,52 @@
       (lambda () (interactive) (org-capture nil "j")))
 
 #+end_src
-
+* General Config
+** Symlinks
+#+begin_src emacs-lisp
+(setq vc-follow-symlinks t)
+(setq find-file-suppress-same-file-warnings t)
+#+end_src
+** Custom file
+#+begin_src emacs-lisp
+(setq custom-file (expand-file-name (concat user-emacs-directory "customs.el")))
+(load custom-file)
+#+end_src
+** Recently edited file
+#+begin_src emacs-lisp
+(recentf-mode 1)
+#+end_src
+** Minibuffer history
+#+begin_src emacs-lisp
+;; Save what you enter into minibuffer prompts
+(setq history-length 25)
+(savehist-mode 1)
+#+end_src
+** Remember last place file was visited
+#+begin_src emacs-lisp
+;; Remember and restore the last cursor location of opened files
+(save-place-mode 1)
+#+end_src
+** Prevent UI dialogs
+#+begin_src emacs-lisp
+;; Don't pop up UI dialogs when prompting
+(setq use-dialog-box nil)
+#+end_src
+** Global auto revert (auto update files)
+#+begin_src emacs-lisp
+;; Revert buffers when the underlying file has changed
+(global-auto-revert-mode 1)
+;; Revert Dired and other buffers
+(setq global-auto-revert-non-file-buffers t)
+#+end_src
+** No littering
+#+begin_src emacs-lisp
+(use-package no-littering)
+;; no-littering doesn't set this by default so we must place
+;; auto save files in the same path as it uses for sessions
+(setq auto-save-file-name-transforms
+      `((".*" ,(no-littering-expand-var-file-name "auto-save/") t)))
+#+end_src
 * Garbage collector
 #+begin_src emacs-lisp
 (setq gc-cons-threshold (* 2 1000 1000))

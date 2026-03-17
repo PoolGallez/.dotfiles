@@ -35,12 +35,6 @@
 ;; Add hook to all programming mode to satisfy my customizations
 (add-hook 'prog-mode-hook #'glz/prog-mode-configs)
 
-(setq vc-follow-symlinks t)
-(setq find-file-suppress-same-file-warnings t)
-
-(setq custom-file (expand-file-name (concat user-emacs-directory "customs.el")))
-(load custom-file)
-
 ;; Make ESC quit prompts instead of counting as chord
 (global-set-key (kbd "<escape>") 'keyboard-escape-quit)
 
@@ -393,5 +387,34 @@
 ;; Defining global keymap for entries in the capture (makes fast to access direct captures)
 (define-key global-map (kbd "C-c j")
   (lambda () (interactive) (org-capture nil "j")))
+
+(setq vc-follow-symlinks t)
+(setq find-file-suppress-same-file-warnings t)
+
+(setq custom-file (expand-file-name (concat user-emacs-directory "customs.el")))
+(load custom-file)
+
+(recentf-mode 1)
+
+;; Save what you enter into minibuffer prompts
+(setq history-length 25)
+(savehist-mode 1)
+
+;; Remember and restore the last cursor location of opened files
+(save-place-mode 1)
+
+;; Don't pop up UI dialogs when prompting
+(setq use-dialog-box nil)
+
+;; Revert buffers when the underlying file has changed
+(global-auto-revert-mode 1)
+;; Revert Dired and other buffers
+(setq global-auto-revert-non-file-buffers t)
+
+(use-package no-littering)
+;; no-littering doesn't set this by default so we must place
+;; auto save files in the same path as it uses for sessions
+(setq auto-save-file-name-transforms
+      `((".*" ,(no-littering-expand-var-file-name "auto-save/") t)))
 
 (setq gc-cons-threshold (* 2 1000 1000))

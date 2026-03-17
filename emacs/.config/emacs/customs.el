@@ -7,7 +7,7 @@
  '(package-selected-packages
    '(all-the-icons counsel counsel-projectile doom-modeline doom-themes
                    evil-collection evil-magit forge general helpful
-                   ivy-rich magit org-bullets projectile
+                   ivy-rich magit no-littering org-bullets projectile
                    rainbow-delimiters visual-fill-column)))
 
   
