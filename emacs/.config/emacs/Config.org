@@ -1,6 +1,23 @@
 #+title: Emacs configuration 
 #+author: Paolo Galletta
 #+PROPERTY: header-args:emacs-lisp :tangle ./init.el
+* Optimizations
+** Garbage collector
+#+begin_src emacs-lisp
+(setq gc-cons-threshold (* 50 1000 1000))
+#+end_src
+* Temporary
+#+begin_src emacs-lisp
+  (defun efs/display-startup-time ()
+  (message "Emacs loaded in %s with %d garbage collections."
+           (format "%.2f seconds"
+                   (float-time
+                   (time-subtract after-init-time before-init-time)))
+           gcs-done))
+
+(add-hook 'emacs-startup-hook #'efs/display-startup-time)
+
+#+end_src
 * General UI
 ** Basic UI inhibitions
 #+begin_src emacs-lisp
@@ -500,4 +517,9 @@
     (define-key global-map (kbd "C-c j")
       (lambda () (interactive) (org-capture nil "j")))
 
+#+end_src
+
+* Garbage collector
+#+begin_src emacs-lisp
+(setq gc-cons-threshold (* 2 1000 1000))
 #+end_src

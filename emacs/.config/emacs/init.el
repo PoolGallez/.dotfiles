@@ -1,3 +1,14 @@
+(setq gc-cons-threshold (* 50 1000 1000))
+
+(defun efs/display-startup-time ()
+  (message "Emacs loaded in %s with %d garbage collections."
+           (format "%.2f seconds"
+                   (float-time
+                   (time-subtract after-init-time before-init-time)))
+           gcs-done))
+
+(add-hook 'emacs-startup-hook #'efs/display-startup-time)
+
 (setq inhibit-startup-message t)
   (scroll-bar-mode -1)        ; Disable visible scrollbar
   (tool-bar-mode -1)          ; Disable the toolbar
@@ -389,3 +400,5 @@
 ;; Defining global keymap for entries in the capture (makes fast to access direct captures)
 (define-key global-map (kbd "C-c j")
   (lambda () (interactive) (org-capture nil "j")))
+
+(setq gc-cons-threshold (* 2 1000 1000))
