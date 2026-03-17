@@ -55,6 +55,17 @@
   ; (set-face-attribute 'default nil :font "Fira Code Retina" :height 280)
 
 #+end_src emacs-lisp
+* General Config
+** Symlinks
+#+begin_src emacs-lisp
+(setq vc-follow-symlinks t)
+(setq find-file-suppress-same-file-warnings t)
+#+end_src
+** Custom file
+#+begin_src emacs-lisp
+(setq custom-file (expand-file-name (concat user-emacs-directory "customs.el")))
+(load custom-file)
+#+end_src
 * Keybindings
 ** Global Keybindings
 #+begin_src emacs-lisp
@@ -85,6 +96,7 @@
       "b" '(:ignore t :which-key "buffers")
       "bb" '("Switch buffers" . counsel-switch-buffer)
       "h" '(:package help :keymap help-map :which-key "help") ; How to assign a prefix to existin map      ; Buffers group
+      "c" '("Open Config" lambda () (interactive) (find-file (expand-file-name (concat user-emacs-directory "Config.org"))))
       ))
 #+end_src
 * Package management settings
@@ -171,27 +183,12 @@
 #+end_src
 
 ** Doom modeline (fancy modeline)
-
 #+begin_src emacs-lisp
   (use-package all-the-icons)
   (use-package doom-modeline
     :ensure t
     :init (doom-modeline-mode 1)
-    :custom ((doom-modeline-height 15)))`
-
-  (custom-set-variables
-   ;; custom-set-variables was added by Custom.
-   ;; If you edit it by hand, you could mess it up, so be careful.
-   ;; Your init file should contain only one such instance.
-   ;; If there is more than one, they won't work right.
-   '(package-selected-packages nil))
-
-  (custom-set-faces
-   ;; custom-set-faces was added by Custom.
-   ;; If you edit it by hand, you could mess it up, so be careful.
-   ;; Your init file should contain only one such instance.
-   ;; If there is more than one, they won't work right.
-   )
+    :custom ((doom-modeline-height 15)))
 #+end_src
 ** Which + Helpful ( describe keymap + better documentation)
 #+begin_src emacs-lisp
@@ -523,3 +520,6 @@
 #+begin_src emacs-lisp
 (setq gc-cons-threshold (* 2 1000 1000))
 #+end_src
+
+* My Functions
+

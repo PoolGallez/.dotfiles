@@ -35,6 +35,12 @@
 ;; Add hook to all programming mode to satisfy my customizations
 (add-hook 'prog-mode-hook #'glz/prog-mode-configs)
 
+(setq vc-follow-symlinks t)
+(setq find-file-suppress-same-file-warnings t)
+
+(setq custom-file (expand-file-name (concat user-emacs-directory "customs.el")))
+(load custom-file)
+
 ;; Make ESC quit prompts instead of counting as chord
 (global-set-key (kbd "<escape>") 'keyboard-escape-quit)
 
@@ -60,6 +66,7 @@
     "b" '(:ignore t :which-key "buffers")
     "bb" '("Switch buffers" . counsel-switch-buffer)
     "h" '(:package help :keymap help-map :which-key "help") ; How to assign a prefix to existin map      ; Buffers group
+    "c" '("Open Config" lambda () (interactive) (find-file (expand-file-name (concat user-emacs-directory "Config.org"))))
     ))
 
 ;; Initialize package sources
@@ -123,21 +130,7 @@
 (use-package doom-modeline
   :ensure t
   :init (doom-modeline-mode 1)
-  :custom ((doom-modeline-height 15)))`
-
-(custom-set-variables
- ;; custom-set-variables was added by Custom.
- ;; If you edit it by hand, you could mess it up, so be careful.
- ;; Your init file should contain only one such instance.
- ;; If there is more than one, they won't work right.
- '(package-selected-packages nil))
-
-(custom-set-faces
- ;; custom-set-faces was added by Custom.
- ;; If you edit it by hand, you could mess it up, so be careful.
- ;; Your init file should contain only one such instance.
- ;; If there is more than one, they won't work right.
- )
+  :custom ((doom-modeline-height 15)))
 
 ;; Helper for the key bindings
 (use-package which-key
