@@ -6,16 +6,16 @@
 #+begin_src emacs-lisp
 (setq gc-cons-threshold (* 50 1000 1000))
 #+end_src
-* Temporary
+* Startup performance
 #+begin_src emacs-lisp
-  (defun efs/display-startup-time ()
+  (defun glz/display-startup-time ()
   (message "Emacs loaded in %s with %d garbage collections."
            (format "%.2f seconds"
                    (float-time
                    (time-subtract after-init-time before-init-time)))
            gcs-done))
 
-(add-hook 'emacs-startup-hook #'efs/display-startup-time)
+(add-hook 'emacs-startup-hook #'glz/display-startup-time)
 
 #+end_src
 * General UI
@@ -117,59 +117,112 @@
 #+end_src
 
 * Packages
-** Ivy (completion backend)
+** Completion Frameworks
+***  Ivy (completion backend)
 #+begin_src emacs-lisp
-  ; Set of tools for better completion on emacs
-  (use-package ivy
-    :diminish                       ; Prevents to appear on the linemode
-    :bind (("C-s" . swiper)
-           :map ivy-minibuffer-map
-           ("TAB" . ivy-alt-done)	
-           ("C-l" . ivy-alt-done)
-           ("C-j" . ivy-next-line)
-           ("C-k" . ivy-previous-line)
-           :map ivy-switch-buffer-map
-           ("C-k" . ivy-previous-line)
-           ("C-l" . ivy-done)
-           ("C-d" . ivy-switch-buffer-kill)
-           :map ivy-reverse-i-search-map
-           ("C-k" . ivy-previous-line)
-           ("C-d" . ivy-reverse-i-search-kill))
-    :config
-    (ivy-mode 1))
+                                          ; Set of tools for better completion on emacs
+  ;; (use-package ivy
+  ;;   :diminish                       ; Prevents to appear on the linemode
+  ;;   :bind (("C-s" . swiper)
+  ;;          :map ivy-minibuffer-map
+  ;;          ("TAB" . ivy-alt-done)	
+  ;;          ("C-l" . ivy-alt-done)
+  ;;          ("C-j" . ivy-next-line)
+  ;;          ("C-k" . ivy-previous-line)
+  ;;          :map ivy-switch-buffer-map
+  ;;          ("C-k" . ivy-previous-line)
+  ;;          ("C-l" . ivy-done)
+  ;;          ("C-d" . ivy-switch-buffer-kill)
+  ;;          :map ivy-reverse-i-search-map
+  ;;          ("C-k" . ivy-previous-line)
+  ;;          ("C-d" . ivy-reverse-i-search-kill))
+  ;;   :config
+  ;;   (ivy-mode 1))
 
 #+end_src
-** Counsel (search engine with ivy backend)
+*** Counsel (search engine with ivy backend)
 #+begin_src emacs-lisp
 
   ;; Better Emacs function search (fuzzy search, ...)
-  (use-package counsel
-    :bind (("M-x" . counsel-M-x)
-           ("C-x b" . counsel-ibuffer)
-           ("C-x C-f" . counsel-find-file)
-           :map minibuffer-local-map
-           ("C-r" . 'counsel-minibuffer-history))
-    :config
-    (setq ivy-initial-inputs-alist nil)) ; Remove the starting^
+  ;; (use-package counsel
+  ;;   :bind (("M-x" . counsel-M-x)
+  ;;          ("C-x b" . counsel-ibuffer)
+  ;;          ("C-x C-f" . counsel-find-file)
+  ;;          :map minibuffer-local-map
+  ;;          ("C-r" . 'counsel-minibuffer-history))
+  ;;   :config
+  ;;   (setq ivy-initial-inputs-alist nil)) ; Remove the starting^
 
-
-  #+end_src
-
-** Swiper (search engine)
-  #+begin_src emacs-lisp
-  (use-package swiper)
 
 #+end_src
 
-** Ivy rich (verbose information)
+*** Swiper (search engine)
+#+begin_src emacs-lisp
+                                          ;  (use-package swiper)
+
+#+end_src
+
+*** Ivy rich (verbose information)
 
 #+begin_src emacs-lisp
 
   ;; Better completion with more details (function descriptions, ...)
-  (use-package ivy-rich
-    :init
-    (ivy-rich-mode 1))
+  ;; (use-package ivy-rich
+  ;;   :init
+  ;;   (
+  ;;     ivy-rich-mode 1))
 #+end_src
+
+*** Vertico
+#+begin_src emacs-lisp
+  (use-package vertico
+    :custom
+    (vertico-scroll-margin 0) ;; Different scroll margin
+    (vertico-count 20) ;; Show more candidates
+    (vertico-resize t) ;; Grow and shrink the Vertico minibuffer
+    (vertico-cycle t) ;; Enable cycling for `vertico-next/previous'
+    :init
+    (vertico-mode t))
+#+end_src
+*** Marginalia
+#+begin_src emacs-lisp
+;; Enable rich annotations using the Marginalia package
+(use-package marginalia
+  ;; Bind `marginalia-cycle' locally in the minibuffer.  To make the binding
+  ;; available in the *Completions* buffer, add it to the
+  ;; `completion-list-mode-map'.
+  :bind (:map minibuffer-local-map
+         ("M-A" . marginalia-cycle))
+
+  ;; The :init section is always executed.
+  :init
+
+  ;; Marginalia must be activated in the :init section of use-package such that
+  ;; the mode gets enabled right away. Note that this forces loading the
+  ;; package.
+  (marginalia-mode))
+#+end_src
+
+*** Orderless
+#+begin_src emacs-lisp
+;; Optionally use the `orderless' completion style.
+(use-package orderless
+  :custom
+  ;; Configure a custom style dispatcher (see the Consult wiki)
+  ;; (orderless-style-dispatchers '(+orderless-consult-dispatch orderless-affix-dispatch))
+  ;; (orderless-component-separator #'orderless-escapable-split-on-space)
+  (completion-styles '(orderless basic))
+  (completion-category-overrides '((file (styles partial-completion))))
+  (completion-category-defaults nil) ;; Disable defaults, use our settings
+  (completion-pcm-leading-wildcard t)) ;; Emacs 31: partial-completion behaves like substring
+
+#+end_src
+
+*** Consult
+#+begin_src 
+
+#+end_src
+*** Embark
 
 ** Doom modeline (fancy modeline)
 #+begin_src emacs-lisp
@@ -181,24 +234,24 @@
 #+end_src
 ** Which + Helpful ( describe keymap + better documentation)
 #+begin_src emacs-lisp
-;; Helper for the key bindings
-(use-package which-key
-  :init (which-key-mode)
-  :diminish which-key-mode
-  :config (setq which-key-idle-delay 0.3))
+  ;; Helper for the key bindings
+  (use-package which-key
+    :init (which-key-mode)
+    :diminish which-key-mode
+    :config (setq which-key-idle-delay 0.3))
 
 
 
-;; Better help screen
-(use-package helpful
-  :custom                        ; Set variable of customizable variables
-  (counsel-describe-function-function #'helpful-callable)    ; set counsel help variables to helpful
-  (counsel-describe-variable-function #'helpful-variable)
-  :bind
-  ([remap describe-function] . counsel-describe-function)    ; remap exiting keys to new function
-  ([remap describe-command] . helpful-command)
-  ([remap describe-variable] . counsel-describe-variable)
-  ([remap describe-key] . helpful-key))
+  ;; Better help screen
+  (use-package helpful
+    ;; :custom                        ; Set variable of customizable variables
+    ;; (counsel-describe-function-function #'helpful-callable)    ; set counsel help variables to helpful
+    ;; (counsel-describe-variable-function #'helpful-variable)
+    :bind
+    ([remap describe-function] .  helpful-callable)   ; remap exiting keys to new function
+    ([remap describe-command] . helpful-command)
+    ([remap describe-variable] . helpful-variable)
+    ([remap describe-key] . helpful-key))
 #+end_src
 ** Rainbow delimiters
 #+begin_src emacs-lisp
@@ -252,19 +305,19 @@
 
  #+begin_src emacs-lisp
 
-     ;; Project tile for managing projects 
-     (use-package projectile
-       :diminish projectile-mode
-       :config (projectile-mode)
-       :custom ((projectile-completion-system 'ivy)) ; Use ivy also in projectile
-       ;:bind-keymap
-       ;("C-c p" . projectile-command-map)
-       )
-     ;; Integrate the better completion framework counsel and ivy into projectile
-     (use-package counsel-projectile
-      :after projectile
-      :config
-      (counsel-projectile-mode 1))
+   ;; Project tile for managing projects 
+   (use-package projectile
+     :diminish projectile-mode
+     :config (projectile-mode)
+     :custom ((projectile-completion-system 'ivy)) ; Use ivy also in projectile
+     ;:bind-keymap
+     ;("C-c p" . projectile-command-map)
+     )
+   ;; Integrate the better completion framework counsel and ivy into projectile
+   ;; (use-package counsel-projectile
+   ;;  :after projectile
+   ;;  :config
+   ;;  (counsel-projectile-mode 1))
 
 #+end_src
 
@@ -301,11 +354,12 @@
 #+begin_src emacs-lisp
 ;; Automatically tangle our Emacs.org config file when we save it
 (defun glz/org-babel-tangle-config ()
-  (when (string-equal (buffer-file-name)
-                      (expand-file-name "~/.dotfiles/emacs/.config/emacs/Config.org"))
+  (when (string-search "Config.org" (buffer-file-name))
+                      
     ;; Dynamic scoping to the rescue
     (let ((org-confirm-babel-evaluate nil))
       (org-babel-tangle))))
+
 
 (add-hook 'org-mode-hook (lambda () (add-hook 'after-save-hook #'glz/org-babel-tangle-config)))
 #+end_src
@@ -384,7 +438,7 @@
 
  #+begin_src emacs-lisp
   ;; Org notes directories
-  (setq org-directory "/home/pool/Documents/PKDB_Org/") 
+  (setq org-directory "~/Documents/PKDB_Org/") 
 
    ;; Org agenda 
   (setq org-agenda-files '("Tasks.org" "Birthdays.org" "Calendar.org")) 
@@ -544,16 +598,14 @@
 #+end_src
 ** No littering
 #+begin_src emacs-lisp
-(use-package no-littering)
-;; no-littering doesn't set this by default so we must place
-;; auto save files in the same path as it uses for sessions
-(setq auto-save-file-name-transforms
-      `((".*" ,(no-littering-expand-var-file-name "auto-save/") t)))
+  (use-package no-littering)
+  ;; no-littering doesn't set this by default so we must place
+  ;; auto save files in the same path as it uses for sessions
+  (setq auto-save-file-name-transforms
+        `((".*" ,(no-littering-expand-var-file-name "auto-save/") t)))
 #+end_src
 * Garbage collector
 #+begin_src emacs-lisp
 (setq gc-cons-threshold (* 2 1000 1000))
 #+end_src
-
 * My Functions
-
