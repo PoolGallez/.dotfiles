@@ -51,11 +51,12 @@
   (glz/leader-key
     ; Fast shortcuts
     "." '("Find file in current directory" . find-file)
+    "SPC" '("Find file in project" . project-find-file)
     ; Git group
     "g" '(:ignore t :which-key "git"); how to define groups of keymaps, not bound directly to commands
     "gg" '("Open Magit" . magit-status)
     ; Projectile group
-    "p" '(:package project :keymap project-prefix-map :which-key "project") ; How to assign a prefix to existin map      ; Buffers group
+    "p" '(:package project :keymap project-prefix-map :which-key "project") ; How to assign a prefix to existin map      ; Buffers group
     "pp" '("Switch projects" . project-switch-project)
     "b" '(:ignore t :which-key "buffers")
     "bb" '("Switch buffers" . consult-buffer)
@@ -371,6 +372,21 @@
 (setq ediff-split-window-function 'split-window-horizontally)
 (setq ediff-window-setup-function 'ediff-setup-windows-plain)
 
+(use-package dired
+  :ensure nil ; preinstalled
+  :defer t
+  :hook
+  (dired-mode . dired-hide-details-mode)
+  :config
+  (setq dired-dwim-target t)                  ;; do what I mean
+  (setq dired-recursive-copies 'always)       ;; don't ask when copying directories
+  (setq dired-create-destination-dirs 'ask)   
+  (setq dired-clean-confirm-killing-deleted-buffers nil)
+  (setq dired-make-directory-clickable t)
+  (setq dired-mouse-drag-files t))
+(use-package all-the-icons-dired
+  :hook (dired-mode . all-the-icons-dired-mode))
+
 ;; Automatically tangle our Emacs.org config file when we save it
 (defun glz/org-babel-tangle-config ()
   (when (string-search "Config.org" (buffer-file-name))
@@ -543,6 +559,35 @@
 ;; Defining global keymap for entries in the capture (makes fast to access direct captures)
 (define-key global-map (kbd "C-c j")
   (lambda () (interactive) (org-capture nil "j")))
+
+(use-package org-roam
+  :after org
+  :custom
+  (org-roam-directory (file-truename (concat org-directory "roam/"))
+  :bind (("C-c n l" . org-Roam-buffer-toggle)
+         ("C-c n f" . org-roam-node-find)
+         ("C-c n g" . org-roam-graph)
+         ("C-c n i" . org-roam-node-insert)
+         ("C-c n c" . org-roam-capture)
+         ;; Dailies
+         ("C-c n j" . org-roam-dailies-capture-today))
+  :config
+  ;; If you're using a vertical completion framework, you might want a more informative completion interface (setq org-roam-node-display-template (concat "${title:*} " (propertize "${tags:10}" 'face 'org-tag)))
+  (org-roam-db-autosync-mode)
+  ;; If using org-roam-protocol
+  (require 'org-roam-protocol)))
+
+(use-package org-roam-ui
+    :after org-roam
+;;         normally we'd recommend hooking orui after org-roam, but since org-roam does not have
+;;         a hookable mode anymore, you're advised to pick something yourself
+;;         if you don't care about startup time, use
+;;  :hook (after-init . org-roam-ui-mode)
+    :config
+    (setq org-roam-ui-sync-theme t
+          org-roam-ui-follow t
+          org-roam-ui-update-on-save t
+          org-roam-ui-open-on-start t))
 
 (setq vc-follow-symlinks t)
 (setq find-file-suppress-same-file-warnings t)

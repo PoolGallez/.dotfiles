@@ -4,10 +4,11 @@
  ;; Your init file should contain only one such instance.
  ;; If there is more than one, they won't work right.
  '(package-selected-packages
-   '(all-the-icons command-log-mode consult doom-modeline doom-themes
-                   evil-collection forge general helpful marginalia
-                   no-littering orderless org-bullets
-                   rainbow-delimiters vertico visual-fill-column)))
+   '(all-the-icons all-the-icons-dired command-log-mode consult dired
+                   doom-modeline doom-themes evil-collection forge
+                   general helpful marginalia no-littering orderless
+                   org-bullets org-roam org-roam-ui rainbow-delimiters
+                   vertico visual-fill-column)))
 
 (custom-set-faces
  ;; custom-set-faces was added by Custom.
