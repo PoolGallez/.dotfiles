@@ -66,6 +66,11 @@
     "t" '(:ignore t :which-key "toggles")
     "tl" '("Toggle line numbers" . display-line-numbers-mode)
     "c" '("Open Config" lambda () (interactive) (find-file (expand-file-name (concat user-emacs-directory "Config.org"))))
+    "o" '(:ignore t :which-key "org")
+    "oc" '("Org capture" . org-capture)
+    "or" '(:ignore t :which-key "org-roam")
+    "orc" '("Roam capture" . org-roam-capture)
+    "ori" '("Insert node" . org-roam-node-insert)
     "s" '("Open eshell" . eshell)
     ))
 
@@ -545,9 +550,10 @@ nil
 
 ; Taken from Systems crafters, please adapt it to needs and check the docu
 (setq org-capture-templates
-  `(("t" "Tasks / Projects")
-    ("tt" "Task" entry (file+olp org-directory "Inbox")
-         "* TODO %?\n  %U\n  %a\n  %i" :empty-lines 1)
+  `(("t" "Task" entry (file+olp "~/Documents/PKDB_Org/Tasks.org" "Tasks")
+         "* TODO %?\n  %U\n  %a\n  %i")
+    ("b" "Birthday" entry (file "~/Documents/PKDB_Org/Birthdays.org")
+         "* %?\n  %^t\n %i")
     ))
 
 (use-package org-roam
@@ -563,7 +569,7 @@ nil
          ("C-c n j" . org-roam-dailies-capture-today))
   :config
   ;; If you're using a vertical completion framework, you might want a more informative completion interface (setq org-roam-node-display-template (concat "${title:*} " (propertize "${tags:10}" 'face 'org-tag)))
-  (org-roam-db-autosync-mode)
+  (setq org-roam-db-autosync-mode t)
   ;; If using org-roam-protocol
   (require 'org-roam-protocol)))
 

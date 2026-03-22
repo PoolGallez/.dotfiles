@@ -5,6 +5,8 @@
  ;; If there is more than one, they won't work right.
  '(dired-listing-switches "-al --group-directories-first")
  '(display-line-numbers-type 'relative)
+ '(evil-undo-system 'undo-redo)
+ '(org-roam-db-autosync-mode t)
  '(package-selected-packages
    '(all-the-icons all-the-icons-dired command-log-mode consult dired
                    doom-modeline doom-themes embark embark-consult

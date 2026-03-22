@@ -54,7 +54,7 @@
   ; (set-face-attribute 'default nil :font "Fira Code Retina" :height 280)
 
   #+end_src emacs-lisp
-** Yes or no --> Y or N
+** Yes or no to Y or N
 #+begin_src emacs-lisp
 (defalias 'yes-or-no-p 'y-or-n-p)
 #+end_src
@@ -66,35 +66,40 @@
 #+end_src
 ** General (Advanced keymapping)
 #+begin_src emacs-lisp
-  ;; General for unified way of defining keymaps (with additional features)
-  (use-package general
-    :after evil
-    :config
-    (general-evil-setup t)
-    (general-auto-unbind-keys)
-    (general-create-definer glz/leader-key
-      :states '(normal insert visual emacs)
-      :keymaps 'override
-      :prefix "SPC"
-      :global-prefix "C-SPC")
-    (glz/leader-key
-      ; Fast shortcuts
-      "." '("Find file in current directory" . find-file)
-      "SPC" '("Find file in project" . project-find-file)
-      ; Git group
-      "g" '(:ignore t :which-key "git"); how to define groups of keymaps, not bound directly to commands
-      "gg" '("Open Magit" . magit-status)
-      ; Project group
-      "p" '(:package project :keymap project-prefix-map :which-key "project") ; How to assign a prefix to existin map      ; Buffers group
-      "pp" '("Switch projects" . project-switch-project)
-      "b" '(:ignore t :which-key "buffers")
-      "bb" '("Switch buffers" . consult-buffer)
-      "h" '(:package help :keymap help-map :which-key "help") ; How to assign a prefix to existin map      ; Buffers group
-      "t" '(:ignore t :which-key "toggles")
-      "tl" '("Toggle line numbers" . display-line-numbers-mode)
-      "c" '("Open Config" lambda () (interactive) (find-file (expand-file-name (concat user-emacs-directory "Config.org"))))
-      "s" '("Open eshell" . eshell)
-      ))
+    ;; General for unified way of defining keymaps (with additional features)
+    (use-package general
+      :after evil
+      :config
+      (general-evil-setup t)
+      (general-auto-unbind-keys)
+      (general-create-definer glz/leader-key
+        :states '(normal insert visual emacs)
+        :keymaps 'override
+        :prefix "SPC"
+        :global-prefix "C-SPC")
+      (glz/leader-key
+        ; Fast shortcuts
+        "." '("Find file in current directory" . find-file)
+        "SPC" '("Find file in project" . project-find-file)
+        ; Git group
+        "g" '(:ignore t :which-key "git"); how to define groups of keymaps, not bound directly to commands
+        "gg" '("Open Magit" . magit-status)
+        ; Project group
+        "p" '(:package project :keymap project-prefix-map :which-key "project") ; How to assign a prefix to existin map      ; Buffers group
+        "pp" '("Switch projects" . project-switch-project)
+        "b" '(:ignore t :which-key "buffers")
+        "bb" '("Switch buffers" . consult-buffer)
+        "h" '(:package help :keymap help-map :which-key "help") ; How to assign a prefix to existin map      ; Buffers group
+        "t" '(:ignore t :which-key "toggles")
+        "tl" '("Toggle line numbers" . display-line-numbers-mode)
+        "c" '("Open Config" lambda () (interactive) (find-file (expand-file-name (concat user-emacs-directory "Config.org"))))
+        "o" '(:ignore t :which-key "org")
+        "oc" '("Org capture" . org-capture)
+        "or" '(:ignore t :which-key "org-roam")
+        "orc" '("Roam capture" . org-roam-capture)
+        "ori" '("Insert node" . org-roam-node-insert)
+        "s" '("Open eshell" . eshell)
+        ))
 #+end_src
 * Package management settings
 #+begin_src emacs-lisp
@@ -662,12 +667,13 @@
 ** Capture templates
   
   #+begin_src emacs-lisp
-    ; Taken from Systems crafters, please adapt it to needs and check the docu
-    (setq org-capture-templates
-      `(("t" "Tasks / Projects")
-        ("tt" "Task" entry (file+olp org-directory "Inbox")
-             "* TODO %?\n  %U\n  %a\n  %i" :empty-lines 1)
-        ))
+        ; Taken from Systems crafters, please adapt it to needs and check the docu
+        (setq org-capture-templates
+          `(("t" "Task" entry (file+olp "~/Documents/PKDB_Org/Tasks.org" "Tasks")
+                 "* TODO %?\n  %U\n  %a\n  %i")
+            ("b" "Birthday" entry (file "~/Documents/PKDB_Org/Birthdays.org")
+                 "* %?\n  %^t\n %i")
+            ))
 #+end_src
 
 ** Org Roam
@@ -685,7 +691,7 @@
            ("C-c n j" . org-roam-dailies-capture-today))
     :config
     ;; If you're using a vertical completion framework, you might want a more informative completion interface (setq org-roam-node-display-template (concat "${title:*} " (propertize "${tags:10}" 'face 'org-tag)))
-    (org-roam-db-autosync-mode)
+    (setq org-roam-db-autosync-mode t)
     ;; If using org-roam-protocol
     (require 'org-roam-protocol)))
 #+end_src
