@@ -9,13 +9,13 @@
 * Startup performance
 #+begin_src emacs-lisp
   (defun glz/display-startup-time ()
-  (message "Emacs loaded in %s with %d garbage collections."
-           (format "%.2f seconds"
-                   (float-time
-                   (time-subtract after-init-time before-init-time)))
-           gcs-done))
+    (message "Emacs loaded in %s with %d garbage collections."
+             (format "%.2f seconds"
+                     (float-time
+                     (time-subtract after-init-time before-init-time)))
+             gcs-done))
 
-(add-hook 'emacs-startup-hook #'glz/display-startup-time)
+  (add-hook 'emacs-startup-hook #'glz/display-startup-time)
 
 #+end_src
 * General UI
@@ -66,40 +66,46 @@
 #+end_src
 ** General (Advanced keymapping)
 #+begin_src emacs-lisp
-    ;; General for unified way of defining keymaps (with additional features)
-    (use-package general
-      :after evil
-      :config
-      (general-evil-setup t)
-      (general-auto-unbind-keys)
-      (general-create-definer glz/leader-key
-        :states '(normal insert visual emacs)
-        :keymaps 'override
-        :prefix "SPC"
-        :global-prefix "C-SPC")
-      (glz/leader-key
-        ; Fast shortcuts
-        "." '("Find file in current directory" . find-file)
-        "SPC" '("Find file in project" . project-find-file)
-        ; Git group
-        "g" '(:ignore t :which-key "git"); how to define groups of keymaps, not bound directly to commands
-        "gg" '("Open Magit" . magit-status)
-        ; Project group
-        "p" '(:package project :keymap project-prefix-map :which-key "project") ; How to assign a prefix to existin map      ; Buffers group
-        "pp" '("Switch projects" . project-switch-project)
-        "b" '(:ignore t :which-key "buffers")
-        "bb" '("Switch buffers" . consult-buffer)
-        "h" '(:package help :keymap help-map :which-key "help") ; How to assign a prefix to existin map      ; Buffers group
-        "t" '(:ignore t :which-key "toggles")
-        "tl" '("Toggle line numbers" . display-line-numbers-mode)
-        "c" '("Open Config" lambda () (interactive) (find-file (expand-file-name (concat user-emacs-directory "Config.org"))))
-        "o" '(:ignore t :which-key "org")
-        "oc" '("Org capture" . org-capture)
-        "or" '(:ignore t :which-key "org-roam")
-        "orc" '("Roam capture" . org-roam-capture)
-        "ori" '("Insert node" . org-roam-node-insert)
-        "s" '("Open eshell" . eshell)
-        ))
+  ;; General for unified way of defining keymaps (with additional features)
+  (use-package general
+    :after evil
+    :config
+    (general-evil-setup t)
+    (general-auto-unbind-keys)
+    (general-create-definer glz/leader-key
+      :states '(normal insert visual emacs)
+      :keymaps 'override
+      :prefix "SPC"
+      :global-prefix "C-SPC")
+    (glz/leader-key
+      ; Fast shortcuts
+      "." '("Find file in current directory" . find-file)
+      "SPC" '("Find file in project" . project-find-file)
+      ; Git group
+      "g" '(:ignore t :which-key "git"); how to define groups of keymaps, not bound directly to commands
+      "gg" '("Open Magit" . magit-status)
+      ; Project group
+      "p" '(:package project :keymap project-prefix-map :which-key "project") ; How to assign a prefix to existin map      ; Buffers group
+      "pp" '("Switch projects" . project-switch-project)
+      "b" '(:ignore t :which-key "buffers")
+      "bb" '("Switch buffers" . consult-buffer)
+      "bp" '("Previous buffer" . previous-buffer)
+      "bn" '("Next buffer" . next-buffer)
+      "h" '(:package help :keymap help-map :which-key "help") ; How to assign a prefix to existin map      ; Buffers group
+      "t" '(:ignore t :which-key "toggles")
+      "tl" '("Toggle line numbers" . display-line-numbers-mode)
+      "c" '("Open Config" lambda () (interactive) (find-file (expand-file-name (concat user-emacs-directory "Config.org"))))
+      "o" '(:ignore t :which-key "org")
+      "oc" '("Org capture" . org-capture)
+      "or" '(:ignore t :which-key "org-roam")
+      "orc" '("Roam capture" . org-roam-capture)
+      "orf" '("Roam find" . org-roam-node-find)
+      "ori" '("Insert node" . org-roam-node-insert)
+      "ora" '("Immediate insertion" . org-roam-node-insert-immediate)
+      "oru" '("Open Graph" . org-roam-ui-open)
+      "orb" '("Open Backlinks" . org-roam-buffer-toggle)
+      "s" '("Open eshell" . eshell)
+      ))
 #+end_src
 * Package management settings
 #+begin_src emacs-lisp
@@ -440,13 +446,15 @@
     :after evil
     :config
     (evil-collection-init)
-    )
 
 
   (use-package evil-mc
     :after evil
     :config
-    (global-evil-mc-mode  1)) ;; enable
+    (global-evil-mc-mode  1)
+    :bind
+    (:map evil-insert-state-map   
+    ("C->" . evil-mc-make-cursor-move-next-line)))) ;; enable
     #+end_src
 ** Magit (git client)
 #+begin_src emacs-lisp
@@ -694,6 +702,14 @@
     (setq org-roam-db-autosync-mode t)
     ;; If using org-roam-protocol
     (require 'org-roam-protocol)))
+
+; To have a function to insert a node (capture) without immediately writing a content in it
+(defun org-roam-node-insert-immediate (arg &rest args)
+  (interactive "P")
+  (let ((args (cons arg args))
+        (org-roam-capture-templates (list (append (car org-roam-capture-templates)
+                                                  '(:immediate-finish t)))))
+    (apply #'org-roam-node-insert args)))
 #+end_src
 
 ** Org Roam Ui
@@ -710,6 +726,15 @@
           org-roam-ui-update-on-save t
           org-roam-ui-open-on-start t))
 
+#+end_src
+
+** Org-download 
+Package that helps transfering images from point A to B, with org-download-screenshot, this can be also the clipboard
+#+begin_src emacs-lisp
+(use-package org-download)
+
+;; Drag-and-drop to `dired`
+(add-hook 'dired-mode-hook 'org-download-enable)
 #+end_src
 
 * General Config
@@ -757,6 +782,11 @@
   ;; auto save files in the same path as it uses for sessions
   (setq auto-save-file-name-transforms
         `((".*" ,(no-littering-expand-var-file-name "auto-save/") t)))
+#+end_src
+** Nix Mode
+#+begin_src emacs-lisp
+(use-package nix-mode
+  :mode "\\.nix\\'")
 #+end_src
 * Garbage collector
 #+begin_src emacs-lisp

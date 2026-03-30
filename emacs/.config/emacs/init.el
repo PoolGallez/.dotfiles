@@ -62,6 +62,8 @@
     "pp" '("Switch projects" . project-switch-project)
     "b" '(:ignore t :which-key "buffers")
     "bb" '("Switch buffers" . consult-buffer)
+    "bp" '("Previous buffer" . previous-buffer)
+    "bn" '("Next buffer" . next-buffer)
     "h" '(:package help :keymap help-map :which-key "help") ; How to assign a prefix to existin map      ; Buffers group
     "t" '(:ignore t :which-key "toggles")
     "tl" '("Toggle line numbers" . display-line-numbers-mode)
@@ -70,7 +72,11 @@
     "oc" '("Org capture" . org-capture)
     "or" '(:ignore t :which-key "org-roam")
     "orc" '("Roam capture" . org-roam-capture)
+    "orf" '("Roam find" . org-roam-node-find)
     "ori" '("Insert node" . org-roam-node-insert)
+    "ora" '("Immediate insertion" . org-roam-node-insert-immediate)
+    "oru" '("Open Graph" . org-roam-ui-open)
+    "orb" '("Open Backlinks" . org-roam-buffer-toggle)
     "s" '("Open eshell" . eshell)
     ))
 
@@ -364,13 +370,15 @@ nil
   :after evil
   :config
   (evil-collection-init)
-  )
 
 
 (use-package evil-mc
   :after evil
   :config
-  (global-evil-mc-mode  1)) ;; enable
+  (global-evil-mc-mode  1)
+  :bind
+  (:map evil-insert-state-map   
+  ("C->" . evil-mc-make-cursor-move-next-line)))) ;; enable
 
 ;; Magit git client
 (use-package magit
@@ -557,21 +565,29 @@ nil
     ))
 
 (use-package org-roam
-  :after org
-  :custom
-  (org-roam-directory (file-truename (concat org-directory "roam/"))
-  :bind (("C-c n l" . org-roam-buffer-toggle)
-         ("C-c n f" . org-roam-node-find)
-         ("C-c n g" . org-roam-graph)
-         ("C-c n i" . org-roam-node-insert)
-         ("C-c n c" . org-roam-capture)
-         ;; Dailies
-         ("C-c n j" . org-roam-dailies-capture-today))
-  :config
-  ;; If you're using a vertical completion framework, you might want a more informative completion interface (setq org-roam-node-display-template (concat "${title:*} " (propertize "${tags:10}" 'face 'org-tag)))
-  (setq org-roam-db-autosync-mode t)
-  ;; If using org-roam-protocol
-  (require 'org-roam-protocol)))
+    :after org
+    :custom
+    (org-roam-directory (file-truename (concat org-directory "roam/"))
+    :bind (("C-c n l" . org-roam-buffer-toggle)
+           ("C-c n f" . org-roam-node-find)
+           ("C-c n g" . org-roam-graph)
+           ("C-c n i" . org-roam-node-insert)
+           ("C-c n c" . org-roam-capture)
+           ;; Dailies
+           ("C-c n j" . org-roam-dailies-capture-today))
+    :config
+    ;; If you're using a vertical completion framework, you might want a more informative completion interface (setq org-roam-node-display-template (concat "${title:*} " (propertize "${tags:10}" 'face 'org-tag)))
+    (setq org-roam-db-autosync-mode t)
+    ;; If using org-roam-protocol
+    (require 'org-roam-protocol)))
+
+; To have a function to insert a node (capture) without immediately writing a content in it
+(defun org-roam-node-insert-immediate (arg &rest args)
+  (interactive "P")
+  (let ((args (cons arg args))
+        (org-roam-capture-templates (list (append (car org-roam-capture-templates)
+                                                  '(:immediate-finish t)))))
+    (apply #'org-roam-node-insert args)))
 
 (use-package org-roam-ui
     :after org-roam
@@ -584,6 +600,11 @@ nil
           org-roam-ui-follow t
           org-roam-ui-update-on-save t
           org-roam-ui-open-on-start t))
+
+(use-package org-download)
+
+;; Drag-and-drop to `dired`
+(add-hook 'dired-mode-hook 'org-download-enable)
 
 (setq vc-follow-symlinks t)
 (setq find-file-suppress-same-file-warnings t)
@@ -613,5 +634,8 @@ nil
 ;; auto save files in the same path as it uses for sessions
 (setq auto-save-file-name-transforms
       `((".*" ,(no-littering-expand-var-file-name "auto-save/") t)))
+
+(use-package nix-mode
+  :mode "\\.nix\\'")
 
 (setq gc-cons-threshold (* 2 1000 1000))

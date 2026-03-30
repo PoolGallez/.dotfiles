@@ -11,9 +11,9 @@
    '(all-the-icons all-the-icons-dired command-log-mode consult dired
                    doom-modeline doom-themes embark embark-consult
                    evil-collection evil-mc forge general helpful
-                   marginalia no-littering orderless org-bullets
-                   org-roam org-roam-ui rainbow-delimiters vertico
-                   visual-fill-column))
+                   marginalia nix-mode no-littering orderless
+                   org-bullets org-download org-roam org-roam-ui
+                   rainbow-delimiters vertico visual-fill-column))
  '(project-list-file "/home/pool/.config/emacs/var/project-list.el"))
 
 (custom-set-faces
