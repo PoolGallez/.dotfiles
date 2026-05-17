@@ -1,0 +1,38 @@
+keys:
+  # Recovery master key
+  - &recovery age1d68c4u8n2eyhkr62gvy7dewghaaf4wvyz7wgajl0lh7g6m8w55esvz2hrn  
+  # Per-host keys (typically age keys derived from SSH host keys)
+  - &triskelion age17fky6j8rmg4rdz90zec9cvv050rg5f4lmfg3f42mleerqt5a2y7ss02v5a
+  - &getriebe  age1up97h2gne6mvwfuc3040gscpdpqx0mkvcwjmjkrrj29uuw3uypuszkj86w
+#  - &rocky temporary, add the age key generated from ssh when available
+
+creation_rules:
+  # Secrets only for desktop (+ recovery key)
+  - path_regex: secrets/triskelion/.*\.yaml$
+    key_groups:
+      - age:
+          - *recovery
+          - *triskelion
+
+  # Secrets only for laptop (+ recovery key)
+  - path_regex: secrets/getriebe/.*\.yaml$
+    key_groups:
+      - age:
+          - *recovery
+          - *getriebe
+
+  # Shared secrets 
+  - path_regex: secrets/shared/.*\.yaml$
+    key_groups:
+      - age:
+          - *recovery
+          - *triskelion
+          - *getriebe
+          #- *rocky add when decryption key will be available
+- path_regex: secrets/rocky/.*\.yaml$
+    key_groups:
+      - age:
+          - *recovery
+#          - *rocky add when rocky key will be available
+
+

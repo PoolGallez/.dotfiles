@@ -17,6 +17,7 @@
       quickemu
       libpcap
       wl-clipboard
+      age
   ];
 
   # git configuration
