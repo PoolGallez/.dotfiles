@@ -66,8 +66,20 @@
     git
     openssh
     #  wget
+    wireshark
+    usbutils
   ];
 
+  virtualisation.libvirtd = {
+	enable = true;
+   	qemu.vhostUserPackages = with pkgs; [ virtiofsd ];
+  };
+
+  virtualisation.spiceUSBRedirection.enable = true;
+  programs.virt-manager.enable = true;
+  programs.wireshark.enable = true;
+  programs.wireshark.usbmon.enable = true;
+  users.groups.wireshark.members = [ "pool" ];
   # Some programs need SUID wrappers, can be configured further or are
   # started in user sessions.
   # programs.mtr.enable = true;
