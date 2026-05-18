@@ -19,6 +19,9 @@
   boot.loader.systemd-boot.enable = true;
   boot.loader.efi.canTouchEfiVariables = true;
 
+  # To cross compile and perform updates on rock64
+  boot.binfmt.emulatedSystems = [ "aarch64-linux" ];
+
   # For Gpd, package to enable automatic screen rotation
   hardware.sensor.iio.enable = true;
 
