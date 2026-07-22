@@ -1,795 +1,823 @@
-#+title: Emacs configuration 
+#+title: Emacs configuration
 #+author: Paolo Galletta
-#+PROPERTY: header-args:emacs-lisp :tangle ./init.el
-* Optimizations
-** Garbage collector
+#+PROPERTY: header-args:emacs-lisp :tangle ./post-init.el
+
+* Pre-Early-Init
+:PROPERTIES:
+:header-args:emacs-lisp: :tangle ./pre-early-init.el
+:END:
+** Header
 #+begin_src emacs-lisp
-(setq gc-cons-threshold (* 50 1000 1000))
+;;; pre-early-init.el --- Pre Early Init -*- no-byte-compile: t; lexical-binding: t; -*-
 #+end_src
-* Startup performance
+** GC threshold after startup
+minimal-emacs sets gc-cons-threshold to most-positive-fixnum during startup and
+restores it afterwards. Override the restore target to 2 MB (matching a typical
+Emacs tuning recommendation) instead of the default 32 MB.
 #+begin_src emacs-lisp
-  (defun glz/display-startup-time ()
-    (message "Emacs loaded in %s with %d garbage collections."
-             (format "%.2f seconds"
-                     (float-time
-                     (time-subtract after-init-time before-init-time)))
-             gcs-done))
-
-  (add-hook 'emacs-startup-hook #'glz/display-startup-time)
-
+(setq minimal-emacs-gc-cons-threshold (* 2 1000 1000))
 #+end_src
-* General UI
-** Basic UI inhibitions
+* Post-Init
+** Header
 #+begin_src emacs-lisp
-  (setq inhibit-startup-message t)
-  (scroll-bar-mode -1)        ; Disable visible scrollbar
-  (tool-bar-mode -1)          ; Disable the toolbar
-  (tooltip-mode -1)           ; Disable tooltips
-  (set-fringe-mode 10)        ; Give some breathing room
-
-  (menu-bar-mode -1)            ; Disable the menu bar
-
-
-  (column-number-mode 1)         ;; Show column number on mode line
-
-  ;; Tabs to spaces
-  (setq-default indent-tabs-mode nil
-  	      tab-width 2)
-(setq visible-bell 1)
+;;; post-init.el --- Packages configuration for Minimal Emacs Config -*- no-byte-compile: t; lexical-binding: t; -*-
 #+end_src
-** Line numbers in programming mode
-#+begin_src emacs-lisp
-  (defun glz/prog-mode-configs ()
-    "Personal adjustments for programming modes"
-    ; Display line numbers
-    (display-line-numbers-mode)
-  )
+** Control Panel
+Platform is auto-detected from =system-type=. Edit the feature flags and paths below — that is the only place you need to touch when setting up a new machine.
 
-  ;; Add hook to all programming mode to satisfy my customizations
-  (add-hook 'prog-mode-hook #'glz/prog-mode-configs)
-#+end_src
-** Fonts
+*** Platform Detection
 #+begin_src emacs-lisp
-
-  ; (set-face-attribute 'default nil :font "Fira Code Retina" :height 280)
-
-  #+end_src emacs-lisp
-** Yes or no to Y or N
-#+begin_src emacs-lisp
-(defalias 'yes-or-no-p 'y-or-n-p)
-#+end_src
-* Keybindings
-** Global Keybindings
-#+begin_src emacs-lisp
-  ;; Make ESC quit prompts instead of counting as chord
-  (global-set-key (kbd "<escape>") 'keyboard-escape-quit)
-#+end_src
-** General (Advanced keymapping)
-#+begin_src emacs-lisp
-  ;; General for unified way of defining keymaps (with additional features)
-  (use-package general
-    :after evil
-    :config
-    (general-evil-setup t)
-    (general-auto-unbind-keys)
-    (general-create-definer glz/leader-key
-      :states '(normal insert visual emacs)
-      :keymaps 'override
-      :prefix "SPC"
-      :global-prefix "C-SPC")
-    (glz/leader-key
-      ; Fast shortcuts
-      "." '("Find file in current directory" . find-file)
-      "SPC" '("Find file in project" . project-find-file)
-      ; Git group
-      "g" '(:ignore t :which-key "git"); how to define groups of keymaps, not bound directly to commands
-      "gg" '("Open Magit" . magit-status)
-      ; Project group
-      "p" '(:package project :keymap project-prefix-map :which-key "project") ; How to assign a prefix to existin map      ; Buffers group
-      "pp" '("Switch projects" . project-switch-project)
-      "b" '(:ignore t :which-key "buffers")
-      "bb" '("Switch buffers" . consult-buffer)
-      "bp" '("Previous buffer" . previous-buffer)
-      "bn" '("Next buffer" . next-buffer)
-      "h" '(:package help :keymap help-map :which-key "help") ; How to assign a prefix to existin map      ; Buffers group
-      "t" '(:ignore t :which-key "toggles")
-      "tl" '("Toggle line numbers" . display-line-numbers-mode)
-      "c" '("Open Config" lambda () (interactive) (find-file (expand-file-name (concat user-emacs-directory "Config.org"))))
-      "o" '(:ignore t :which-key "org")
-      "oc" '("Org capture" . org-capture)
-      "or" '(:ignore t :which-key "org-roam")
-      "orc" '("Roam capture" . org-roam-capture)
-      "orf" '("Roam find" . org-roam-node-find)
-      "ori" '("Insert node" . org-roam-node-insert)
-      "ora" '("Immediate insertion" . org-roam-node-insert-immediate)
-      "oru" '("Open Graph" . org-roam-ui-open)
-      "orb" '("Open Backlinks" . org-roam-buffer-toggle)
-      "s" '("Open eshell" . eshell)
-      ))
-#+end_src
-* Package management settings
-#+begin_src emacs-lisp
-  ;; Initialize package sources
-  (require 'package)
-
-  (setq package-archives '(("melpa" . "https://melpa.org/packages/")
-                           ("org" . "https://orgmode.org/elpa/")
-                           ("elpa" . "https://elpa.gnu.org/packages/")))
-  (package-initialize)
-  (unless package-archive-contents
-   (package-refresh-contents))
-
-  ;; Initialize use-package on non-Linux platforms
-  (unless (package-installed-p 'use-package)
-     (package-install 'use-package))
-
-  (require 'use-package) ; Package manager
-  (setq use-package-always-ensure t)
+(defvar glz/platform
+  (cond ((eq system-type 'windows-nt) 'windows)
+        ((eq system-type 'gnu/linux)  'linux)
+        ((eq system-type 'android)    'android)
+        (t 'linux))
+  "Current platform symbol: windows, linux, or android.")
 #+end_src
 
-* Theming
+*** Feature Flags
+Add or remove platform symbols from each list to control what gets installed.
+
+| Module          | Enabled on          |
+|-----------------+---------------------|
+| org-roam        | linux               |
+| forge           | linux               |
+| nix-mode        | linux               |
+| testfall        | windows             |
+| anforderungen   | windows             |
+| canape-par      | all                 |
+
 #+begin_src emacs-lisp
-  (use-package doom-themes
-    :config
-    (load-theme 'doom-dracula t))
-
-#+end_src
-* Packages
-** Completion Frameworks
-***  Ivy (completion backend)
-#+begin_src emacs-lisp
-                                          ; Set of tools for better completion on emacs
-  ;; (use-package ivy
-  ;;   :diminish                       ; Prevents to appear on the linemode
-  ;;   :bind (("C-s" . swiper)
-  ;;          :map ivy-minibuffer-map
-  ;;          ("TAB" . ivy-alt-done)	
-  ;;          ("C-l" . ivy-alt-done)
-  ;;          ("C-j" . ivy-next-line)
-  ;;          ("C-k" . ivy-previous-line)
-  ;;          :map ivy-switch-buffer-map
-  ;;          ("C-k" . ivy-previous-line)
-  ;;          ("C-l" . ivy-done)
-  ;;          ("C-d" . ivy-switch-buffer-kill)
-  ;;          :map ivy-reverse-i-search-map
-  ;;          ("C-k" . ivy-previous-line)
-  ;;          ("C-d" . ivy-reverse-i-search-kill))
-  ;;   :config
-  ;;   (ivy-mode 1))
-
-#+end_src
-*** Counsel (search engine with ivy backend)
-#+begin_src emacs-lisp
-
-  ;; Better Emacs function search (fuzzy search, ...)
-  ;; (use-package counsel
-  ;;   :bind (("M-x" . counsel-M-x)
-  ;;          ("C-x b" . counsel-ibuffer)
-  ;;          ("C-x C-f" . counsel-find-file)
-  ;;          :map minibuffer-local-map
-  ;;          ("C-r" . 'counsel-minibuffer-history))
-  ;;   :config
-  ;;   (setq ivy-initial-inputs-alist nil)) ; Remove the starting^
-
-
+(defvar glz/enable-org-roam       (memq glz/platform '(linux)))
+(defvar glz/enable-forge          (memq glz/platform '(linux)))
+(defvar glz/enable-nix            (memq glz/platform '(linux)))
+(defvar glz/enable-testfall       (memq glz/platform '(windows)))
+(defvar glz/enable-anforderungen  (memq glz/platform '(windows)))
+(defvar glz/enable-canape-par     t)
 #+end_src
 
-*** Swiper (search engine)
+*** Paths
 #+begin_src emacs-lisp
-                                          ;  (use-package swiper)
+(defvar glz/org-directory
+  (pcase glz/platform
+    ('windows "~/Documents/PKDB_Org/")
+    ('linux   "~/Documents/PKDB_Org/")
+    ('android "~/storage/shared/Documents/PKDB_Org/"))
+  "Root directory for all org files.")
 
+;; On Windows, Emacs GUI does not inherit the system PATH.
+;; Add Git's unix tools so diff, grep, find, etc. are available to all packages.
+(when (eq glz/platform 'windows)
+  (let ((git-bin "C:/Program Files/Git/usr/bin"))
+    (when (file-directory-p git-bin)
+      (add-to-list 'exec-path git-bin)
+      (setenv "PATH" (concat git-bin ";" (getenv "PATH"))))))
 #+end_src
 
-*** Ivy rich (verbose information)
-
+** Startup performance display
 #+begin_src emacs-lisp
+(defun glz/display-startup-time ()
+  (message "Emacs loaded in %s with %d garbage collections."
+           (format "%.2f seconds"
+                   (float-time (time-subtract after-init-time before-init-time)))
+           gcs-done))
 
-  ;; Better completion with more details (function descriptions, ...)
-  ;; (use-package ivy-rich
-  ;;   :init
-  ;;   (
-  ;;     ivy-rich-mode 1))
+(add-hook 'emacs-startup-hook #'glz/display-startup-time)
 #+end_src
-
-*** Vertico
+** Basic UI settings
+*** Column numbers in mode line
 #+begin_src emacs-lisp
-  (use-package vertico
-    :after evil
-    :custom
-    (vertico-scroll-margin 0) ;; Different scroll margin
-    (vertico-count 20) ;; Show more candidates
-    (vertico-resize t) ;; Grow and shrink the Vertico minibuffer
-    (vertico-cycle t) ;; Enable cycling for `vertico-next/previous'
-    :bind (:map vertico-map
-                ; Use page-up/down to scroll vertico buffer, like ivy does by default.
-                ("C-j" . 'vertico-next)
-                ("C-M-j" . #'vertico-next-group)
-                ("C-k" . #'vertico-previous)
-                ("C-M-k" . #'vertico-previous-group))
-    :init
-    (vertico-mode t))
+(column-number-mode 1)
 #+end_src
-*** Marginalia
+*** Visible bell
+init.el disables visible-bell; override here to enable it.
 #+begin_src emacs-lisp
-;; Enable rich annotations using the Marginalia package
-(use-package marginalia
-  ;; Bind `marginalia-cycle' locally in the minibuffer.  To make the binding
-  ;; available in the *Completions* buffer, add it to the
-  ;; `completion-list-mode-map'.
-  :bind (:map minibuffer-local-map
-         ("M-A" . marginalia-cycle))
+(setq visible-bell t)
+#+end_src
+*** Tab width
+init.el sets tab-width to 4; override to 2.
+#+begin_src emacs-lisp
+(setq-default indent-tabs-mode nil
+              tab-width 2)
+#+end_src
+*** Line numbers in programming modes
+#+begin_src emacs-lisp
+(defun glz/prog-mode-configs ()
+  "Personal adjustments for programming modes."
+  (display-line-numbers-mode))
 
-  ;; The :init section is always executed.
+(add-hook 'prog-mode-hook #'glz/prog-mode-configs)
+#+end_src
+*** Scratch buffer message
+init.el forces fundamental-mode and nil message; override both here.
+#+begin_src emacs-lisp
+(setq initial-major-mode 'lisp-interaction-mode)
+(setq initial-scratch-message
+      ";; This buffer is for text that is not saved, and for Lisp evaluation.\n;; To create a file, visit it with `\\[find-file]' and enter text in its buffer.\n\n")
+#+end_src
+*** ESC quits prompts
+#+begin_src emacs-lisp
+(global-set-key (kbd "<escape>") 'keyboard-escape-quit)
+#+end_src
+** Packages
+*** Compile Angel (native compilation — must be first)
+Native compilation converts Elisp to machine code, improving execution speed.
+This block must come before all other package declarations.
+#+begin_src emacs-lisp
+(use-package compile-angel
+  :demand t
+  :config
+  (setq package-native-compile nil)
+  (setq compile-angel-verbose t)
+
+  ;; Exclude init files from compilation to avoid subtle issues
+  (push "/init.el" compile-angel-excluded-files)
+  (push "/early-init.el" compile-angel-excluded-files)
+  (push "/pre-init.el" compile-angel-excluded-files)
+  (push "/post-init.el" compile-angel-excluded-files)
+  (push "/pre-early-init.el" compile-angel-excluded-files)
+  (push "/post-early-init.el" compile-angel-excluded-files)
+  ;; customs.el is generated by Custom and has no lexical-binding directive
+  (push "/customs.el" compile-angel-excluded-files)
+
+  (compile-angel-on-load-mode 1))
+#+end_src
+*** Doom Themes
+Load the theme early to avoid a flash of unstyled content.
+#+begin_src emacs-lisp
+(use-package doom-themes
+  :config
+  (let ((inhibit-redisplay t))
+    (mapc #'disable-theme custom-enabled-themes)
+    (load-theme 'doom-dracula t)))
+#+end_src
+*** Doom Modeline
+#+begin_src emacs-lisp
+(use-package all-the-icons
+  :commands all-the-icons-install-fonts)
+
+(use-package doom-modeline
+  :commands doom-modeline-mode
+  :hook (after-init . doom-modeline-mode)
+  :custom (doom-modeline-height 15))
+#+end_src
+*** File History (autorevert, recentf, savehist, saveplace)
+The variables for these packages are already set optimally by init.el.
+These use-package blocks just activate the modes at the right time.
+#+begin_src emacs-lisp
+(use-package autorevert
+  :ensure nil
+  :commands (auto-revert-mode global-auto-revert-mode)
+  :hook (after-init . global-auto-revert-mode)
   :init
+  (setq auto-revert-interval 3)
+  (setq auto-revert-remote-files nil)
+  (setq auto-revert-use-notify t)
+  (setq auto-revert-avoid-polling nil))
 
-  ;; Marginalia must be activated in the :init section of use-package such that
-  ;; the mode gets enabled right away. Note that this forces loading the
-  ;; package.
-  (marginalia-mode))
+(use-package recentf
+  :ensure nil
+  :commands (recentf-mode recentf-cleanup)
+  :hook (after-init . recentf-mode)
+  :init
+  (setq recentf-auto-cleanup (if (daemonp) 300 'never))
+  (setq recentf-exclude
+        (list "\\.tar$" "\\.tbz2$" "\\.tbz$" "\\.tgz$" "\\.bz2$"
+              "\\.bz$" "\\.gz$" "\\.gzip$" "\\.xz$" "\\.zip$"
+              "\\.7z$" "\\.rar$"
+              "COMMIT_EDITMSG\\'"
+              "\\.\\(?:gz\\|gif\\|svg\\|png\\|jpe?g\\|bmp\\|xpm\\)$"
+              "-autoloads\\.el$" "autoload\\.el$"))
+  :config
+  (add-hook 'kill-emacs-hook #'recentf-cleanup -90))
+
+(use-package savehist
+  :ensure nil
+  :commands (savehist-mode savehist-save)
+  :hook (after-init . savehist-mode)
+  :init
+  (setq history-length 300)
+  (setq savehist-autosave-interval 600))
+
+(use-package saveplace
+  :ensure nil
+  :commands (save-place-mode save-place-local-mode)
+  :hook (after-init . save-place-mode)
+  :init
+  (setq save-place-limit 400))
 #+end_src
-
-*** Orderless
+*** Completion framework
+**** Vertico
 #+begin_src emacs-lisp
-;; Optionally use the `orderless' completion style.
+(use-package vertico
+  :after evil
+  :custom
+  (vertico-scroll-margin 0)
+  (vertico-count 20)
+  (vertico-resize t)
+  (vertico-cycle t)
+  :bind (:map vertico-map
+              ("C-j" . vertico-next)
+              ("C-M-j" . vertico-next-group)
+              ("C-k" . vertico-previous)
+              ("C-M-k" . vertico-previous-group))
+  :init
+  (vertico-mode t))
+#+end_src
+**** Orderless
+#+begin_src emacs-lisp
 (use-package orderless
   :custom
-  ;; Configure a custom style dispatcher (see the Consult wiki)
-  ;; (orderless-style-dispatchers '(+orderless-consult-dispatch orderless-affix-dispatch))
-  ;; (orderless-component-separator #'orderless-escapable-split-on-space)
   (completion-styles '(orderless basic))
   (completion-category-overrides '((file (styles partial-completion))))
-  (completion-category-defaults nil) ;; Disable defaults, use our settings
-  (completion-pcm-leading-wildcard t)) ;; Emacs 31: partial-completion behaves like substring
-
+  (completion-category-defaults nil)
+  (completion-pcm-leading-wildcard t))
 #+end_src
-
-*** Consult
+**** Marginalia
 #+begin_src emacs-lisp
-  (use-package consult
-    ;; Replace bindings. Lazily loaded by `use-package'.
-    :bind (;; C-c bindings in `mode-specific-map'
-           ("C-c M-x" . consult-mode-command)
-           ("C-c h" . consult-history)
-           ("C-c k" . consult-kmacro)
-           ("C-c m" . consult-man)
-           ("C-c i" . consult-info)
-           ([remap Info-search] . consult-info)
-           ;; C-x bindings in `ctl-x-map'
-           ("C-x M-:" . consult-complex-command)     ;; orig. repeat-complex-command
-           ("C-x b" . consult-buffer)                ;; orig. switch-to-buffer
-           ("C-x 4 b" . consult-buffer-other-window) ;; orig. switch-to-buffer-other-window
-           ("C-x 5 b" . consult-buffer-other-frame)  ;; orig. switch-to-buffer-other-frame
-           ("C-x t b" . consult-buffer-other-tab)    ;; orig. switch-to-buffer-other-tab
-           ("C-x r b" . consult-bookmark)            ;; orig. bookmark-jump
-           ("C-x p b" . consult-project-buffer)      ;; orig. project-switch-to-buffer
-           ;; Custom M-# bindings for fast register access
-           ("M-#" . consult-register-load)
-           ("M-'" . consult-register-store)          ;; orig. abbrev-prefix-mark (unrelated)
-           ("C-M-#" . consult-register)
-           ;; Other custom bindings
-           ("M-y" . consult-yank-pop)                ;; orig. yank-pop
-           ;; M-g bindings in `goto-map'
-           ("M-g e" . consult-compile-error)
-           ("M-g r" . consult-grep-match)
-           ("M-g f" . consult-flymake)               ;; Alternative: consult-flycheck
-           ("M-g g" . consult-goto-line)             ;; orig. goto-line
-           ("M-g M-g" . consult-goto-line)           ;; orig. goto-line
-           ("M-g o" . consult-outline)               ;; Alternative: consult-org-heading
-           ("M-g m" . consult-mark)
-           ("M-g k" . consult-global-mark)
-           ("M-g i" . consult-imenu)
-           ("M-g I" . consult-imenu-multi)
-           ;; M-s bindings in `search-map'
-           ("M-s d" . consult-find)                  ;; Alternative: consult-fd
-           ("M-s c" . consult-locate)
-           ("M-s g" . consult-grep)
-           ("M-s G" . consult-git-grep)
-           ("M-s r" . consult-ripgrep)
-           ("C-s" . consult-line)
-           ("M-s L" . consult-line-multi)
-           ("M-s k" . consult-keep-lines)
-           ("M-s u" . consult-focus-lines)
-           ;; Isearch integration
-           ("M-s e" . consult-isearch-history)
-           :map isearch-mode-map
-           ("M-e" . consult-isearch-history)         ;; orig. isearch-edit-string
-           ("M-s e" . consult-isearch-history)       ;; orig. isearch-edit-string
-           ("M-s l" . consult-line)                  ;; needed by consult-line to detect isearch
-           ("M-s L" . consult-line-multi)            ;; needed by consult-line to detect isearch
-           ;; Minibuffer history
-           :map minibuffer-local-map
-           ("M-s" . consult-history)                 ;; orig. next-matching-history-element
-           ("M-r" . consult-history))                ;; orig. previous-matching-history-element
-
-    ;; The :init configuration is always executed (Not lazy)
-    :init
-
-    ;; Tweak the register preview for `consult-register-load',
-    ;; `consult-register-store' and the built-in commands.  This improves the
-    ;; register formatting, adds thin separator lines, register sorting and hides
-    ;; the window mode line.
-    (advice-add #'register-preview :override #'consult-register-window)
-    (setq register-preview-delay 0.5)
-
-    ;; Use Consult to select xref locations with preview
-    (setq xref-show-xrefs-function #'consult-xref
-          xref-show-definitions-function #'consult-xref)
-
-    ;; Configure other variables and modes in the :config section,
-    ;; after lazily loading the package.
-    :config
-
-    ;; Optionally configure preview. The default value
-    ;; is 'any, such that any key triggers the preview.
-    ;; (setq consult-preview-key 'any)
-    ;; (setq consult-preview-key "M-.")
-    ;; (setq consult-preview-key '("S-<down>" "S-<up>"))
-    ;; For some commands and buffer sources it is useful to configure the
-    ;; :preview-key on a per-command basis using the `consult-customize' macro.
-    (consult-customize
-     consult-theme :preview-key '(:debounce 0.2 any)
-     consult-ripgrep consult-git-grep consult-grep consult-man
-     consult-bookmark consult-recent-file consult-xref
-     consult-source-bookmark consult-source-file-register
-     consult-source-recent-file consult-source-project-recent-file
-     ;; :preview-key "M-."
-     :preview-key '(:debounce 0.4 any))
-
-    ;; Optionally configure the narrowing key.
-    ;; Both < and C-+ work reasonably well.
-    (setq consult-narrow-key "<") ;; "C-+"
-    
-    ;; Optionally make narrowing help available in the minibuffer.
-    ;; You may want to use `embark-prefix-help-command' or which-key instead.
-    (keymap-set consult-narrow-map (concat consult-narrow-key " ?") #'consult-narrow-help)
-  )
+(use-package marginalia
+  :after compat
+  :bind (:map minibuffer-local-map
+              ("M-A" . marginalia-cycle))
+  :hook (after-init . marginalia-mode))
 #+end_src
-*** Embark
+**** Embark
 #+begin_src emacs-lisp
-       (use-package embark
-       :ensure t
+(use-package embark
+  :commands (embark-act
+             embark-dwim
+             embark-export
+             embark-collect
+             embark-bindings
+             embark-prefix-help-command)
+  :bind (("C-." . embark-act)
+         ("C-;" . embark-dwim)
+         ("C-h B" . embark-bindings))
+  :init
+  (setq prefix-help-command #'embark-prefix-help-command)
+  :config
+  (add-to-list 'display-buffer-alist
+               '("\\`\\*Embark Collect \\(Live\\|Completions\\)\\*"
+                 nil
+                 (window-parameters (mode-line-format . none)))))
 
-       :bind
-       (("C-." . embark-act)         ;; pick some comfortable binding
-        ("C-;" . embark-dwim)        ;; good alternative: M-.
-        ("C-h B" . embark-bindings)) ;; alternative for `describe-bindings'
-    :init
-    ;; Optionally replace the key help with a completing-read interface
-    (setq prefix-help-command #'embark-prefix-help-command)
-
-    ;; Show the Embark target at point via Eldoc. You may adjust the
-    ;; Eldoc strategy, if want to see the documentation from
-    ;; multiple providers. Beware that using this can be a little
-    ;; jarring since the message shown in the minibuffer can be more
-    ;; than one line, causing the modeline to move up and down:
-
-    ;; (add-hook 'eldoc-documentation-functions #'embark-eldoc-first-target)
-    ;; (setq eldoc-documentation-strategy #'eldoc-documentation-compose-eagerly)
-
-    ;; Add Embark to the mouse context menu. Also enable `context-menu-mode'.
-    ;; (context-menu-mode 1)
-    ;; (add-hook 'context-menu-functions #'embark-context-menu 100)
-
-    :config
-
-    ;; Hide the mode line of the Embark live/completions buffers
-    (add-to-list 'display-buffer-alist
-    '("\\`\\*Embark Collect \\(Live\\|Completions\\)\\*"
-    nil
-    (window-parameters (mode-line-format . none)))))
-    ;; Consult users will also want the embark-consult package.
-    (use-package embark-consult
-    :ensure t
-    :after (embark consult)) ; only need to install it, embark loads it after consult if found
+(use-package embark-consult
+  :hook (embark-collect-mode . consult-preview-at-point-mode))
 #+end_src
-** Doom modeline (fancy modeline)
+**** Consult
 #+begin_src emacs-lisp
-  (use-package all-the-icons)
-  (use-package doom-modeline
-    :ensure t
-    :init (doom-modeline-mode 1)
-    :custom ((doom-modeline-height 15)))
+(use-package consult
+  :bind (("C-c M-x" . consult-mode-command)
+         ("C-c h" . consult-history)
+         ("C-c k" . consult-kmacro)
+         ("C-c m" . consult-man)
+         ("C-c i" . consult-info)
+         ([remap Info-search] . consult-info)
+         ("C-x M-:" . consult-complex-command)
+         ("C-x b" . consult-buffer)
+         ("C-x 4 b" . consult-buffer-other-window)
+         ("C-x 5 b" . consult-buffer-other-frame)
+         ("C-x t b" . consult-buffer-other-tab)
+         ("C-x r b" . consult-bookmark)
+         ("C-x p b" . consult-project-buffer)
+         ("M-#" . consult-register-load)
+         ("M-'" . consult-register-store)
+         ("C-M-#" . consult-register)
+         ("M-y" . consult-yank-pop)
+         ("M-g e" . consult-compile-error)
+         ("M-g r" . consult-grep-match)
+         ("M-g f" . consult-flymake)
+         ("M-g g" . consult-goto-line)
+         ("M-g M-g" . consult-goto-line)
+         ("M-g o" . consult-outline)
+         ("M-g m" . consult-mark)
+         ("M-g k" . consult-global-mark)
+         ("M-g i" . consult-imenu)
+         ("M-g I" . consult-imenu-multi)
+         ("M-s d" . consult-find)
+         ("M-s c" . consult-locate)
+         ("M-s g" . consult-grep)
+         ("M-s G" . consult-git-grep)
+         ("M-s r" . consult-ripgrep)
+         ("C-s" . consult-line)
+         ("M-s L" . consult-line-multi)
+         ("M-s k" . consult-keep-lines)
+         ("M-s u" . consult-focus-lines)
+         ("M-s e" . consult-isearch-history)
+         :map isearch-mode-map
+         ("M-e" . consult-isearch-history)
+         ("M-s e" . consult-isearch-history)
+         ("M-s l" . consult-line)
+         ("M-s L" . consult-line-multi)
+         :map minibuffer-local-map
+         ("M-s" . consult-history)
+         ("M-r" . consult-history))
+  :hook (completion-list-mode . consult-preview-at-point-mode)
+  :init
+  (advice-add #'register-preview :override #'consult-register-window)
+  (setq register-preview-delay 0.5)
+  (setq xref-show-xrefs-function #'consult-xref
+        xref-show-definitions-function #'consult-xref)
+  :config
+  (consult-customize
+   consult-theme :preview-key '(:debounce 0.2 any)
+   consult-ripgrep consult-git-grep consult-grep consult-man
+   consult-bookmark consult-recent-file consult-xref
+   consult-source-bookmark consult-source-file-register
+   consult-source-recent-file consult-source-project-recent-file
+   :preview-key '(:debounce 0.4 any))
+  (setq consult-narrow-key "<")
+  (keymap-set consult-narrow-map (concat consult-narrow-key " ?") #'consult-narrow-help))
 #+end_src
-** Which + Helpful ( describe keymap + better documentation)
+*** Evil (Vim emulation)
 #+begin_src emacs-lisp
-  ;; Helper for the key bindings
-  (use-package which-key
-    :init (which-key-mode)
-    :diminish which-key-mode
-    :config (setq which-key-idle-delay 0.3))
+(use-package evil
+  :commands (evil-mode evil-define-key)
+  :hook (after-init . evil-mode)
+  :init
+  (setq evil-want-integration t)
+  (setq evil-want-keybinding nil)
+  ;; C-u scrolls up in normal mode (like Vim)
+  (setq evil-want-C-u-scroll t)
+  ;; Prevent evil from hijacking TAB in terminal
+  (setq evil-want-C-i-jump nil)
+  :custom
+  (evil-ex-visual-char-range t)
+  (evil-ex-search-vim-style-regexp t)
+  (evil-split-window-below t)
+  (evil-vsplit-window-right t)
+  (evil-echo-state nil)
+  (evil-move-cursor-back nil)
+  (evil-v$-excludes-newline t)
+  (evil-want-C-h-delete t)
+  ;; C-u in insert state deletes back to indentation
+  (evil-want-C-u-delete t)
+  (evil-want-fine-undo t)
+  (evil-move-beyond-eol t)
+  (evil-search-wrap nil)
+  (evil-want-Y-yank-to-eol t)
+  :config
+  ;; C-g exits to normal state from insert state
+  (define-key evil-insert-state-map (kbd "C-g") 'evil-normal-state)
+  ;; j/k move by visual lines (useful with wrapped long lines)
+  (evil-global-set-key 'motion "j" 'evil-next-visual-line)
+  (evil-global-set-key 'motion "k" 'evil-previous-visual-line)
+  ;; Start these buffers in normal state
+  (evil-set-initial-state 'messages-buffer-mode 'normal)
+  (evil-set-initial-state 'dashboard-mode 'normal)
+  (evil-set-initial-state 'compilation-mode 'normal)
+  ;; Hook ensures existing compile buffers (created before evil loaded) also get normal state
+  (add-hook 'compilation-mode-hook #'evil-normal-state)
+  ;; :wq saves and kills the buffer; :q kills it (quits Emacs only when no real buffers remain)
+  (evil-ex-define-cmd "wq" (lambda () (interactive) (save-buffer) (kill-current-buffer)))
+  (defun glz/evil-quit ()
+    "Kill current buffer. Quit Emacs only if no user buffers remain."
+    (interactive)
+    (kill-current-buffer)
+    (unless (cl-some (lambda (b)
+                       (let ((name (buffer-name b)))
+                         (and (not (string-prefix-p " " name))
+                              (not (string-prefix-p "*" name)))))
+                     (buffer-list))
+      (save-buffers-kill-terminal)))
+  (evil-ex-define-cmd "q" #'glz/evil-quit))
 
+(use-package evil-collection
+  :after evil
+  :init
+  (setq evil-collection-setup-minibuffer nil)
+  :config
+  (evil-collection-init))
 
+;; Jump to the most recent edit location (g; and g,)
+(use-package goto-chg
+  :commands (goto-last-change goto-last-change-reverse))
 
-  ;; Better help screen
-  (use-package helpful
-    ;; :custom                        ; Set variable of customizable variables
-    ;; (counsel-describe-function-function #'helpful-callable)    ; set counsel help variables to helpful
-    ;; (counsel-describe-variable-function #'helpful-variable)
-    :bind
-    ([remap describe-function] .  helpful-callable)   ; remap exiting keys to new function
-    ([remap describe-command] . helpful-command)
-    ([remap describe-variable] . helpful-variable)
-    ([remap describe-key] . helpful-key))
+(use-package evil-mc
+  :after evil
+  :config
+  (global-evil-mc-mode 1)
+  :bind (:map evil-insert-state-map
+              ("C->" . evil-mc-make-cursor-move-next-line)))
 #+end_src
-** Rainbow delimiters
+*** Org Mode
+**** Auto-tangle on save
+Automatically tangle Config.org whenever it is saved, keeping all .el files in sync.
 #+begin_src emacs-lisp
-  ;; Color parenthesis
-  (use-package rainbow-delimiters
-    :hook (prog-mode . rainbow-delimiters-mode)) 
-
-#+end_src
-
-** Evil (Emacs Vi Layer - vim keybindings)
-#+begin_src emacs-lisp
-  ;; Going evil
-  (use-package evil
-    :init
-    (setq evil-want-integration t)
-    (setq evil-want-keybinding nil)
-    (setq evil-want-C-u-scroll t)
-    (setq evil-want-C-i-jump nil)
-                                          ;:hook (evil-mode . rune/evil-hook)
-    :config
-    (evil-mode 1)
-    (define-key evil-insert-state-map (kbd "C-g") 'evil-normal-state)
-    (define-key evil-insert-state-map (kbd "C-h") 'evil-delete-backward-char-and-join)
-
-    ;; Use visual line motions even outside of visual-line-mode buffers
-    (evil-global-set-key 'motion "j" 'evil-next-visual-line)
-    (evil-global-set-key 'motion "k" 'evil-previous-visual-line) ; if you have lines wrapped around, pressing J K moves to next visual line and not next actual line 
-
-    (evil-set-initial-state 'messages-buffer-mode 'normal)
-    (evil-set-initial-state 'dashboard-mode 'normal))
-
-  ;; For the parts of emacs not covered by Evil already
-  (use-package evil-collection
-    :after evil
-    :config
-    (evil-collection-init)
-
-
-  (use-package evil-mc
-    :after evil
-    :config
-    (global-evil-mc-mode  1)
-    :bind
-    (:map evil-insert-state-map   
-    ("C->" . evil-mc-make-cursor-move-next-line)))) ;; enable
-    #+end_src
-** Magit (git client)
-#+begin_src emacs-lisp
-  ;; Magit git client
-  (use-package magit
-    :commands (magit-status magit-get-current-branch)
-    :custom
-    (magit-display-buffer-function #'magit-display-buffer-same-window-except-diff-v1))
-
-#+end_src
-*** Forge (integration with merge requests, issues, ...)
-#+begin_src emacs-lisp
-  ;; To integrate issues, merge requests, ...
-  (use-package forge)
-#+end_src
-** Ediff settings
-#+begin_src emacs-lisp
-  (setq ediff-keep-variants nil)
-  (setq ediff-make-buffers-readonly-at-startup nil)
-  (setq ediff-merge-revisions-with-ancestor t)
-  (setq ediff-show-clashes-only t)
-  (setq ediff-split-window-function 'split-window-horizontally)
-  (setq ediff-window-setup-function 'ediff-setup-windows-plain)
-#+end_src
-** Dired
-#+begin_src emacs-lisp
-    (use-package dired
-      :ensure nil ; preinstalled
-      :defer t
-      :hook
-      (dired-mode . dired-hide-details-mode)
-      :config
-      (setq dired-dwim-target t)                  ;; do what I mean
-      (setq dired-recursive-copies 'always)       ;; don't ask when copying directories
-      (setq dired-create-destination-dirs 'ask)   
-      (setq dired-clean-confirm-killing-deleted-buffers nil)
-      (setq dired-make-directory-clickable t)
-      (setq dired-mouse-drag-files t))
-    (use-package all-the-icons-dired
-      :hook (dired-mode . all-the-icons-dired-mode))
-#+end_src
-* Org mode
-** Automatic Tangle
-#+begin_src emacs-lisp
-;; Automatically tangle our Emacs.org config file when we save it
 (defun glz/org-babel-tangle-config ()
-  (when (string-search "Config.org" (buffer-file-name))
-                      
-    ;; Dynamic scoping to the rescue
+  (when (and (buffer-file-name)
+             (string-match-p "Config\\.org$" (buffer-file-name)))
     (let ((org-confirm-babel-evaluate nil))
       (org-babel-tangle))))
 
-
-(add-hook 'org-mode-hook (lambda () (add-hook 'after-save-hook #'glz/org-babel-tangle-config)))
+(add-hook 'org-mode-hook
+          (lambda ()
+            (add-hook 'after-save-hook #'glz/org-babel-tangle-config nil t)))
 #+end_src
-** UI Basic UI settings
+**** Basic settings and appearance
 #+begin_src emacs-lisp
-  ;; Org mode settings
-  (defun glz/org-mode-setup ()
-    (org-indent-mode)             ; Appearence settings
-    (variable-pitch-mode 1)       ; 
-    (auto-fill-mode 0)
-    (visual-line-mode 1)
-    (setq evil-auto-indent nil))
+(defun glz/org-mode-setup ()
+  "Personal adjustments for org-mode."
+  (org-indent-mode)
+  (variable-pitch-mode 1)
+  (auto-fill-mode 0)
+  (visual-line-mode 1)
+  (setq evil-auto-indent nil))
 
-  (use-package org
-    :hook (org-mode . glz/org-mode-setup)
-    :config
-    (setq org-ellipsis " ▾" ; Substitute the "..." with this symbol
-          org-hide-emphasis-markers t))
+(use-package org
+  :commands (org-mode org-version)
+  :mode ("\\.org\\'" . org-mode)
+  :hook (org-mode . glz/org-mode-setup)
+  :config
+  (setq org-ellipsis " ▾"
+        org-hide-emphasis-markers t)
 
-  (use-package org-bullets
-    :after org
-    :hook (org-mode . org-bullets-mode)
-    :custom
-    (org-bullets-bullet-list '("◉" "○" "●" "○" "●" "○" "●"))) ; Custom property lets yopu do key value pairs, the :config instead lets you put code inside, so you need to set properties with setq for instance
-
-  ;; Replace list hyphen with dot
-  (font-lock-add-keywords 'org-mode
-                          '(("^ *\\([-]\\) "
-                            (0 (prog1 () (compose-region (match-beginning 1) (match-end 1) "•"))))))
-
-
-  ;(dolist (face '((org-level-1 . 1.2) ; This is somehow not working
-  ;                (org-level-2 . 1.1)
-  ;                (org-level-3 . 1.05)
-  ;                (org-level-4 . 1.0)
-  ;                (org-level-5 . 1.1)
-  ;                (org-level-6 . 1.1)
-  ;                (org-level-7 . 1.1)
-  ;                (org-level-8 . 1.1)))
-  ;    (set-face-attribute (car face) nil :font "Cantarell" :weight 'regular :height (cdr face)))
-
-  ;; Make sure org-indent face is available
+  ;; Fixed-pitch faces for code and special elements
   (require 'org-indent)
-
-  ;; Ensure that anything that should be fixed-pitch in Org files appears that way
   (set-face-attribute 'org-block nil :foreground nil :inherit 'fixed-pitch)
-  (set-face-attribute 'org-code nil   :inherit '(shadow fixed-pitch))
+  (set-face-attribute 'org-code nil :inherit '(shadow fixed-pitch))
   (set-face-attribute 'org-indent nil :inherit '(org-hide fixed-pitch))
   (set-face-attribute 'org-verbatim nil :inherit '(shadow fixed-pitch))
   (set-face-attribute 'org-special-keyword nil :inherit '(font-lock-comment-face fixed-pitch))
   (set-face-attribute 'org-meta-line nil :inherit '(font-lock-comment-face fixed-pitch))
   (set-face-attribute 'org-checkbox nil :inherit 'fixed-pitch)
 
-  (defun glz/org-mode-visual-fill ()
-    (setq visual-fill-column-width  150
-          visual-fill-column-center-text t)
-    (visual-fill-column-mode 1))
-
-  (use-package visual-fill-column
-    :hook (org-mode . glz/org-mode-visual-fill))
-
-#+end_src
-
-** Org tempo (snippets)
-
-#+begin_src emacs-lisp
-  ; Org Tempo to have snippets
+  ;; Org Tempo snippets
   (require 'org-tempo)
-
   (add-to-list 'org-structure-template-alist '("sh" . "src shell"))
   (add-to-list 'org-structure-template-alist '("el" . "src emacs-lisp"))
   (add-to-list 'org-structure-template-alist '("py" . "src python"))
 
- #+end_src
-** Org directories
+  ;; Replace list hyphen with bullet dot
+  (font-lock-add-keywords 'org-mode
+                          '(("^ *\\([-]\\) "
+                             (0 (prog1 () (compose-region (match-beginning 1)
+                                                          (match-end 1) "•"))))))
+  :custom
+  (org-hide-leading-stars t)
+  (org-startup-indented t)
+  (org-adapt-indentation nil)
+  (org-edit-src-content-indentation 0)
+  (org-startup-truncated t))
 
- #+begin_src emacs-lisp
-  ;; Org notes directories
-  (setq org-directory "~/Documents/PKDB_Org/") 
-
-   ;; Org agenda 
-  (setq org-agenda-files '("Tasks.org" "Birthdays.org" "Calendar.org")) 
-
+(use-package org-bullets
+  :after org
+  :hook (org-mode . org-bullets-mode)
+  :custom
+  (org-bullets-bullet-list '("◉" "○" "●" "○" "●" "○" "●")))
 #+end_src
-
-** Task Management
-*** Org agenda settings
+**** Visual fill column (centered, width-limited org buffers)
 #+begin_src emacs-lisp
-   
-   (setq org-agenda-start-with-log-mode t) ; Show the log of when tasks have been completed in the agenda
-   (setq org-log-done 'time) ; What to log when task is done (in this case, time)
-   (setq org-log-into-drawer t) ; Add collapsible section for the logging properties
-   ;; Org Agenda Custom views
-   ;; Configure custom agenda views
-   (setq org-agenda-custom-commands
-     '(("d" "Dashboard"
-        ((agenda "" ((org-deadline-warning-days 7)))
-         (todo "NEXT"
-           ((org-agenda-overriding-header "Next Tasks")))
-         (tags-todo "agenda/ACTIVE" ((org-agenda-overriding-header "Active Projects")))))
+(defun glz/org-mode-visual-fill ()
+  (setq visual-fill-column-width 150
+        visual-fill-column-center-text t)
+  (visual-fill-column-mode 1))
 
-       ("n" "Next Tasks"
-        ((todo "NEXT"
-           ((org-agenda-overriding-header "Next Tasks")))))
-
-
-       ("W" "Work Tasks" tags-todo "+work")
-
-       ;; Low-effort next actions
-       ("e" tags-todo "+TODO=\"NEXT\"+Effort<15&+Effort>0"
-        ((org-agenda-overriding-header "Low Effort Tasks")
-         (org-agenda-max-todos 20)
-         (org-agenda-files org-agenda-files)))
-
-       ("w" "Workflow Status"
-        ((todo "WAIT"
-               ((org-agenda-overriding-header "Waiting on External")
-                (org-agenda-files org-agenda-files)))
-         (todo "REVIEW"
-               ((org-agenda-overriding-header "In Review")
-                (org-agenda-files org-agenda-files)))
-         (todo "PLAN"
-               ((org-agenda-overriding-header "In Planning")
-                (org-agenda-todo-list-sublevels nil)
-                (org-agenda-files org-agenda-files)))
-         (todo "BACKLOG"
-               ((org-agenda-overriding-header "Project Backlog")
-                (org-agenda-todo-list-sublevels nil)
-                (org-agenda-files org-agenda-files)))
-         (todo "READY"
-               ((org-agenda-overriding-header "Ready for Work")
-                (org-agenda-files org-agenda-files)))
-         (todo "ACTIVE"
-               ((org-agenda-overriding-header "Active Projects")
-                (org-agenda-files org-agenda-files)))
-         (todo "COMPLETED"
-               ((org-agenda-overriding-header "Completed Projects")
-                (org-agenda-files org-agenda-files)))
-         (todo "CANC"
-               ((org-agenda-overriding-header "Cancelled Projects")
-                (org-agenda-files org-agenda-files)))))))
-
+(use-package visual-fill-column
+  :hook (org-mode . glz/org-mode-visual-fill))
 #+end_src
-
-*** Task keywords and states
+**** Directories and agenda files
 #+begin_src emacs-lisp
-  ; Org TODO states
-  (setq org-todo-keywords
-    '((sequence "TODO(t)" "NEXT(n)" "|" "DONE(d!)")
-      (sequence "IDEA(i)" "DISCUSSION(d)" "ANALYSIS(a)" "IN WORK(w)" "|" "DONE(d!)" "CANCELLED(c!)")))
-
+(setq org-directory glz/org-directory)
+(setq org-agenda-files '("Tasks.org" "Birthdays.org" "Calendar.org"))
 #+end_src
-
-*** Refiling (moving headings / tasks from one file to another)
+**** Task management
 #+begin_src emacs-lisp
+(setq org-agenda-start-with-log-mode t)
+(setq org-log-done 'time)
+(setq org-log-into-drawer t)
 
-  ;; Refiling move stuff from one heading to another possibly in another file
-  (setq org-refile-targets
-        '(("Archive.org" :maxlevel . 1)))
+(setq org-todo-keywords
+      '((sequence "TODO(t)" "NEXT(n)" "|" "DONE(d!)")
+        (sequence "IDEA(i)" "DISCUSSION(d)" "ANALYSIS(a)" "IN WORK(w)" "|" "DONE(d!)" "CANCELLED(c!)")))
 
-  ;; Save Org buffers after refiling!
-  (advice-add 'org-refile :after 'org-save-all-org-buffers)
+(setq org-agenda-custom-commands
+      '(("d" "Dashboard"
+         ((agenda "" ((org-deadline-warning-days 7)))
+          (todo "NEXT"
+                ((org-agenda-overriding-header "Next Tasks")))
+          (tags-todo "agenda/ACTIVE" ((org-agenda-overriding-header "Active Projects")))))
 
-  #+end_src
-  
-** Capture templates
-  
-  #+begin_src emacs-lisp
-        ; Taken from Systems crafters, please adapt it to needs and check the docu
-        (setq org-capture-templates
-          `(("t" "Task" entry (file+olp "~/Documents/PKDB_Org/Tasks.org" "Tasks")
-                 "* TODO %?\n  %U\n  %a\n  %i")
-            ("b" "Birthday" entry (file "~/Documents/PKDB_Org/Birthdays.org")
-                 "* %?\n  %^t\n %i")
-            ))
+        ("n" "Next Tasks"
+         ((todo "NEXT"
+                ((org-agenda-overriding-header "Next Tasks")))))
+
+        ("W" "Work Tasks" tags-todo "+work")
+
+        ("e" tags-todo "+TODO=\"NEXT\"+Effort<15&+Effort>0"
+         ((org-agenda-overriding-header "Low Effort Tasks")
+          (org-agenda-max-todos 20)
+          (org-agenda-files org-agenda-files)))
+
+        ("w" "Workflow Status"
+         ((todo "WAIT"
+                ((org-agenda-overriding-header "Waiting on External")
+                 (org-agenda-files org-agenda-files)))
+          (todo "REVIEW"
+                ((org-agenda-overriding-header "In Review")
+                 (org-agenda-files org-agenda-files)))
+          (todo "PLAN"
+                ((org-agenda-overriding-header "In Planning")
+                 (org-agenda-todo-list-sublevels nil)
+                 (org-agenda-files org-agenda-files)))
+          (todo "BACKLOG"
+                ((org-agenda-overriding-header "Project Backlog")
+                 (org-agenda-todo-list-sublevels nil)
+                 (org-agenda-files org-agenda-files)))
+          (todo "READY"
+                ((org-agenda-overriding-header "Ready for Work")
+                 (org-agenda-files org-agenda-files)))
+          (todo "ACTIVE"
+                ((org-agenda-overriding-header "Active Projects")
+                 (org-agenda-files org-agenda-files)))
+          (todo "COMPLETED"
+                ((org-agenda-overriding-header "Completed Projects")
+                 (org-agenda-files org-agenda-files)))
+          (todo "CANC"
+                ((org-agenda-overriding-header "Cancelled Projects")
+                 (org-agenda-files org-agenda-files)))))))
+
+(setq org-refile-targets '(("Archive.org" :maxlevel . 1)))
+(advice-add 'org-refile :after 'org-save-all-org-buffers)
 #+end_src
-
-** Org Roam
+**** Capture templates
 #+begin_src emacs-lisp
+(setq org-capture-templates
+      `(("t" "Task" entry (file+olp ,(concat glz/org-directory "Tasks.org") "Tasks")
+         "* TODO %?\n  %U\n  %a\n  %i")
+        ("b" "Birthday" entry (file ,(concat glz/org-directory "Birthdays.org"))
+         "* %?\n  %^t\n %i")))
+#+end_src
+**** Org Roam
+#+begin_src emacs-lisp
+(when glz/enable-org-roam
   (use-package org-roam
     :after org
+    :commands (org-roam-buffer-toggle
+               org-roam-node-find
+               org-roam-graph
+               org-roam-node-insert
+               org-roam-capture)
     :custom
-    (org-roam-directory (file-truename (concat org-directory "roam/"))
+    (org-roam-directory (file-truename (concat org-directory "roam/")))
     :bind (("C-c n l" . org-roam-buffer-toggle)
            ("C-c n f" . org-roam-node-find)
            ("C-c n g" . org-roam-graph)
            ("C-c n i" . org-roam-node-insert)
            ("C-c n c" . org-roam-capture)
-           ;; Dailies
            ("C-c n j" . org-roam-dailies-capture-today))
     :config
-    ;; If you're using a vertical completion framework, you might want a more informative completion interface (setq org-roam-node-display-template (concat "${title:*} " (propertize "${tags:10}" 'face 'org-tag)))
-    (setq org-roam-db-autosync-mode t)
-    ;; If using org-roam-protocol
-    (require 'org-roam-protocol)))
+    (setq org-roam-node-display-template
+          (concat "${title:*} " (propertize "${tags:10}" 'face 'org-tag)))
+    (when (file-directory-p org-roam-directory)
+      (org-roam-db-autosync-mode))
+    (require 'org-roam-protocol))
 
-; To have a function to insert a node (capture) without immediately writing a content in it
-(defun org-roam-node-insert-immediate (arg &rest args)
-  (interactive "P")
-  (let ((args (cons arg args))
-        (org-roam-capture-templates (list (append (car org-roam-capture-templates)
-                                                  '(:immediate-finish t)))))
-    (apply #'org-roam-node-insert args)))
+  (defun org-roam-node-insert-immediate (arg &rest args)
+    "Insert an org-roam node without opening a capture buffer."
+    (interactive "P")
+    (let ((args (cons arg args))
+          (org-roam-capture-templates
+           (list (append (car org-roam-capture-templates)
+                         '(:immediate-finish t)))))
+      (apply #'org-roam-node-insert args))))
 #+end_src
-
-** Org Roam Ui
+**** Org Roam UI (visual graph)
 #+begin_src emacs-lisp
-(use-package org-roam-ui
+(when glz/enable-org-roam
+  (use-package org-roam-ui
     :after org-roam
-;;         normally we'd recommend hooking orui after org-roam, but since org-roam does not have
-;;         a hookable mode anymore, you're advised to pick something yourself
-;;         if you don't care about startup time, use
-;;  :hook (after-init . org-roam-ui-mode)
     :config
     (setq org-roam-ui-sync-theme t
           org-roam-ui-follow t
           org-roam-ui-update-on-save t
-          org-roam-ui-open-on-start t))
-
+          org-roam-ui-open-on-start t)))
 #+end_src
-
-** Org-download 
-Package that helps transfering images from point A to B, with org-download-screenshot, this can be also the clipboard
+**** Org Download (drag-and-drop images)
 #+begin_src emacs-lisp
-(use-package org-download)
-
-;; Drag-and-drop to `dired`
-(add-hook 'dired-mode-hook 'org-download-enable)
+(use-package org-download
+  :commands (org-download-clipboard org-download-yank org-download-enable)
+  :hook (dired-mode . org-download-enable))
 #+end_src
-
-* General Config
-** Symlinks
+*** Dired
 #+begin_src emacs-lisp
-(setq vc-follow-symlinks t)
-(setq find-file-suppress-same-file-warnings t)
+(use-package dired
+  :ensure nil
+  :defer t
+  :hook (dired-mode . dired-hide-details-mode)
+  :config
+  (setq dired-dwim-target t)
+  (setq dired-recursive-copies 'always)
+  (setq dired-create-destination-dirs 'ask)
+  (setq dired-clean-confirm-killing-deleted-buffers nil)
+  (setq dired-make-directory-clickable t)
+  (setq dired-mouse-drag-files t))
+
+(use-package all-the-icons-dired
+  :hook (dired-mode . all-the-icons-dired-mode))
+#+end_src
+*** Ediff settings
+#+begin_src emacs-lisp
+(setq ediff-keep-variants nil)
+(setq ediff-make-buffers-readonly-at-startup nil)
+(setq ediff-merge-revisions-with-ancestor t)
+(setq ediff-show-clashes-only t)
+(setq ediff-split-window-function 'split-window-horizontally)
+(setq ediff-window-setup-function 'ediff-setup-windows-plain)
+
+;; On Windows, prefer the Git-bundled diff/diff3 as an explicit fallback
+;; in case exec-path doesn't resolve them yet when ediff loads.
+(when (eq glz/platform 'windows)
+  (let ((diff  (or (executable-find "diff")
+                   "C:/Program Files/Git/usr/bin/diff.exe"))
+        (diff3 (or (executable-find "diff3")
+                   "C:/Program Files/Git/usr/bin/diff3.exe")))
+    (setq ediff-diff-program  diff
+          ediff-diff3-program diff3)))
+#+end_src
+*** Rainbow delimiters
+#+begin_src emacs-lisp
+(use-package rainbow-delimiters
+  :hook (prog-mode . rainbow-delimiters-mode))
+#+end_src
+*** Which-key (keybinding hints)
+#+begin_src emacs-lisp
+(use-package which-key
+  :ensure nil
+  :hook (after-init . which-key-mode)
+  :config (setq which-key-idle-delay 0.3))
+#+end_src
+*** Helpful (better help screens)
+#+begin_src emacs-lisp
+(use-package helpful
+  :commands (helpful-callable
+             helpful-variable
+             helpful-key
+             helpful-command
+             helpful-at-point
+             helpful-function)
+  :bind ([remap describe-command] . helpful-command)
+  :bind ([remap describe-function] . helpful-callable)
+  :bind ([remap describe-key] . helpful-key)
+  :bind ([remap describe-symbol] . helpful-symbol)
+  :bind ([remap describe-variable] . helpful-variable)
+  :custom (helpful-max-buffers 7))
+#+end_src
+*** No-littering (keep .emacs.d clean)
+#+begin_src emacs-lisp
+(use-package no-littering
+  :demand t)
+#+end_src
+*** Magit (git client)
+#+begin_src emacs-lisp
+(use-package magit
+  :commands (magit-status magit-get-current-branch)
+  :custom
+  (magit-display-buffer-function #'magit-display-buffer-same-window-except-diff-v1))
+#+end_src
+*** Forge (GitHub/GitLab integration)
+#+begin_src emacs-lisp
+(when glz/enable-forge
+  (use-package forge
+    :after magit))
+#+end_src
+*** General (leader key and keymaps)
+#+begin_src emacs-lisp
+(use-package general
+  :after evil
+  :config
+  (general-evil-setup t)
+  (general-auto-unbind-keys)
+  (general-create-definer glz/leader-key
+    :states '(normal insert visual emacs)
+    :keymaps 'override
+    :prefix "SPC"
+    :global-prefix "C-SPC")
+  (glz/leader-key
+    "." '("Find file in current directory" . find-file)
+    "SPC" '("Find file in project" . project-find-file)
+
+    ;; Git
+    "g" '(:ignore t :which-key "git")
+    "gg" '("Open Magit" . magit-status)
+
+    ;; Project
+    "p" '(:package project :keymap project-prefix-map :which-key "project")
+    "pp" '("Switch projects" . project-switch-project)
+
+    ;; Buffers
+    "b" '(:ignore t :which-key "buffers")
+    "bb" '("Switch buffers" . consult-buffer)
+    "bp" '("Previous buffer" . previous-buffer)
+    "bn" '("Next buffer" . next-buffer)
+    "bk" '("Kill current buffer" . kill-current-buffer)
+
+    ;; Help
+    "h" '(:package help :keymap help-map :which-key "help")
+
+    ;; Toggles
+    "t" '(:ignore t :which-key "toggles")
+    "tl" '("Toggle line numbers" . display-line-numbers-mode)
+
+    ;; Config
+    "c" '("Open Config" lambda () (interactive)
+          (find-file (expand-file-name (concat user-emacs-directory "Config.org"))))
+
+    ;; Org
+    "o" '(:ignore t :which-key "org")
+    "oc" '("Org capture" . org-capture)
+
+    ;; Shell
+    "s" '("Open eshell" . eshell))
+
+  ;; Testfall toggle — only registered when the mode is loaded
+  (when glz/enable-testfall
+    (glz/leader-key
+      "tt" '("Toggle testfall mode" . testfall-mode)))
+
+  ;; Org-Roam keybindings — only registered when org-roam is enabled
+  (when glz/enable-org-roam
+    (glz/leader-key
+      "or" '(:ignore t :which-key "org-roam")
+      "orc" '("Roam capture" . org-roam-capture)
+      "orf" '("Roam find" . org-roam-node-find)
+      "ori" '("Insert node" . org-roam-node-insert)
+      "ora" '("Immediate insertion" . org-roam-node-insert-immediate)
+      "oru" '("Open Graph" . org-roam-ui-open)
+      "orb" '("Open Backlinks" . org-roam-buffer-toggle))))
+#+end_src
+*** Nix mode
+#+begin_src emacs-lisp
+(when glz/enable-nix
+  (use-package nix-mode
+    :mode "\\.nix\\'"))
+#+end_src
+*** Custom modes
+**** Testfall mode
+#+begin_src emacs-lisp
+(when glz/enable-testfall
+  (let ((f (expand-file-name "testfall-mode.el" user-emacs-directory)))
+    (if (file-exists-p f) (load-file f)
+      (message "Warning: %s not found, skipping testfall-mode" f)))
+
+  (defun glz/testfall-buffer-p ()
+    "Return non-nil if the buffer content matches testfall grammar patterns."
+    (save-excursion
+      (save-restriction
+        (widen)
+        (goto-char (point-min))
+        ;; Match patterns that are highly distinctive to testfall files
+        (re-search-forward
+         (rx (or "<Konzern-Varianten>"
+                 (seq "DUT::" (+ (any alpha "_")))
+                 (seq "VAR::" (+ (any alpha "_")))
+                 (seq "CAL::" (+ (any alpha "_")))
+                 (seq bol "Variation:")
+                 (seq bol "VarEnd")))
+         (min (point-max) 100000)
+         t))))
+
+  (defun glz/maybe-enable-testfall-mode ()
+    "Enable testfall-base-mode when the buffer contains testfall grammar."
+    (when (and buffer-file-name
+               (not (string-match-p "\\.org\\'" buffer-file-name))
+               (not (derived-mode-p 'testfall-base-mode))
+               (glz/testfall-buffer-p))
+      (testfall-base-mode)))
+
+  (add-hook 'find-file-hook #'glz/maybe-enable-testfall-mode))
+#+end_src
+**** Anforderungen mode
+Highlights German-style requirement documents.  The mode file registers its own
+auto-detection hook so loading it here is sufficient.  Populate the two custom
+lists in your init or via =M-x customize-group anforderungen=:
+- =anforderungen-functions= — function names highlighted as ={Name}=
+- =anforderungen-function-abbreviations= — abbreviations for internal =s_XXX= signals
+#+begin_src emacs-lisp
+(when glz/enable-anforderungen
+  (let ((f (expand-file-name "anforderungen-mode.el" user-emacs-directory)))
+    (if (file-exists-p f) (load-file f)
+      (message "Warning: %s not found, skipping anforderungen-mode" f))))
+#+end_src
+**** CANAPE PAR mode
+Syntax highlighting for Vector CANAPE parameter export (=.par=) files.
+The mode file self-registers via =auto-mode-alist= for =*.par=, so loading it
+here is sufficient.  Faces follow the active theme automatically.
+
+Highlighting summary:
+- Parameter names (=IDENTIFIER [TYPE(BITS),(ROWS,COLS)]=) → function-name face
+- Type keyword (=INT=, =FLOAT=, …)                        → type face
+- Bit width and dimension numbers                          → constant face
+- Value-line marker (=:=)                                  → builtin face
+- Numeric values                                           → constant face
+- Semicolon comments (=; …=)                               → comment face
+#+begin_src emacs-lisp
+(when glz/enable-canape-par
+  (let ((f (expand-file-name "canape-par-mode.el" user-emacs-directory)))
+    (if (file-exists-p f) (load-file f)
+      (message "Warning: %s not found, skipping canape-par-mode" f))))
 #+end_src
 ** Custom file
 #+begin_src emacs-lisp
-(setq custom-file (expand-file-name (concat user-emacs-directory "customs.el")))
-(load custom-file)
+(load custom-file 'noerror 'no-message)
 #+end_src
-** Recently edited file
-#+begin_src emacs-lisp
-(recentf-mode 1)
-#+end_src
-** Minibuffer history
-#+begin_src emacs-lisp
-;; Save what you enter into minibuffer prompts
-(setq history-length 25)
-(savehist-mode 1)
-#+end_src
-** Remember last place file was visited
-#+begin_src emacs-lisp
-;; Remember and restore the last cursor location of opened files
-(save-place-mode 1)
-#+end_src
-** Prevent UI dialogs
-#+begin_src emacs-lisp
-;; Don't pop up UI dialogs when prompting
-(setq use-dialog-box nil)
-#+end_src
-** Global auto revert (auto update files)
-#+begin_src emacs-lisp
-;; Revert buffers when the underlying file has changed
-(global-auto-revert-mode 1)
-;; Revert Dired and other buffers
-(setq global-auto-revert-non-file-buffers t)
-#+end_src
-** No littering
-#+begin_src emacs-lisp
-  (use-package no-littering)
-  ;; no-littering doesn't set this by default so we must place
-  ;; auto save files in the same path as it uses for sessions
-  (setq auto-save-file-name-transforms
-        `((".*" ,(no-littering-expand-var-file-name "auto-save/") t)))
-#+end_src
-** Nix Mode
-#+begin_src emacs-lisp
-(use-package nix-mode
-  :mode "\\.nix\\'")
-#+end_src
-* Garbage collector
-#+begin_src emacs-lisp
-(setq gc-cons-threshold (* 2 1000 1000))
-#+end_src
-* My Functions
