@@ -41,10 +41,6 @@
 
 (setq visible-bell t)
 
-(setq initial-major-mode 'lisp-interaction-mode)
-(setq initial-scratch-message
-      ";; This buffer is for text that is not saved, and for Lisp evaluation.\n;; To create a file, visit it with \\[find-file] and enter text in its buffer.\n\n")
-
 (setq-default indent-tabs-mode nil
               tab-width 2)
 
@@ -53,6 +49,10 @@
   (display-line-numbers-mode))
 
 (add-hook 'prog-mode-hook #'glz/prog-mode-configs)
+
+(setq initial-major-mode 'lisp-interaction-mode)
+(setq initial-scratch-message
+      ";; This buffer is for text that is not saved, and for Lisp evaluation.\n;; To create a file, visit it with `\\[find-file]' and enter text in its buffer.\n\n")
 
 (global-set-key (kbd "<escape>") 'keyboard-escape-quit)
 
@@ -130,7 +130,6 @@
   (setq save-place-limit 400))
 
 (use-package vertico
-  :after evil
   :custom
   (vertico-scroll-margin 0)
   (vertico-count 20)
@@ -241,74 +240,125 @@
   (setq consult-narrow-key "<")
   (keymap-set consult-narrow-map (concat consult-narrow-key " ?") #'consult-narrow-help))
 
-(use-package evil
-  :commands (evil-mode evil-define-key)
-  :hook (after-init . evil-mode)
-  :init
-  (setq evil-want-integration t)
-  (setq evil-want-keybinding nil)
-  ;; C-u scrolls up in normal mode (like Vim)
-  (setq evil-want-C-u-scroll t)
-  ;; Prevent evil from hijacking TAB in terminal
-  (setq evil-want-C-i-jump nil)
-  :custom
-  (evil-ex-visual-char-range t)
-  (evil-ex-search-vim-style-regexp t)
-  (evil-split-window-below t)
-  (evil-vsplit-window-right t)
-  (evil-echo-state nil)
-  (evil-move-cursor-back nil)
-  (evil-v$-excludes-newline t)
-  (evil-want-C-h-delete t)
-  ;; C-u in insert state deletes back to indentation
-  (evil-want-C-u-delete t)
-  (evil-want-fine-undo t)
-  (evil-move-beyond-eol t)
-  (evil-search-wrap nil)
-  (evil-want-Y-yank-to-eol t)
-  :config
-  ;; C-g exits to normal state from insert state
-  (define-key evil-insert-state-map (kbd "C-g") 'evil-normal-state)
-  ;; j/k move by visual lines (useful with wrapped long lines)
-  (evil-global-set-key 'motion "j" 'evil-next-visual-line)
-  (evil-global-set-key 'motion "k" 'evil-previous-visual-line)
-  ;; Start these buffers in normal state
-  (evil-set-initial-state 'messages-buffer-mode 'normal)
-  (evil-set-initial-state 'dashboard-mode 'normal)
-  (evil-set-initial-state 'compilation-mode 'normal)
-  ;; Hook ensures existing compile buffers (created before evil loaded) also get normal state
-  (add-hook 'compilation-mode-hook #'evil-normal-state)
-  ;; :wq saves and kills the buffer; :q kills it (quits Emacs only when no real buffers remain)
-  (evil-ex-define-cmd "wq" (lambda () (interactive) (save-buffer) (kill-current-buffer)))
-  (defun glz/evil-quit ()
-    "Kill current buffer. Quit Emacs only if no user buffers remain."
-    (interactive)
-    (kill-current-buffer)
-    (unless (cl-some (lambda (b)
-                       (let ((name (buffer-name b)))
-                         (and (not (string-prefix-p " " name))
-                              (not (string-prefix-p "*" name)))))
-                     (buffer-list))
-      (save-buffers-kill-terminal)))
-  (evil-ex-define-cmd "q" #'glz/evil-quit))
+(defvar glz/git-map (make-sparse-keymap) "Leader sub-keymap for git commands.")
+(define-key glz/git-map "g" #'magit-status)
 
-(use-package evil-collection
-  :after evil
-  :init
-  (setq evil-collection-setup-minibuffer nil)
-  :config
-  (evil-collection-init))
+(defvar glz/buffer-map (make-sparse-keymap) "Leader sub-keymap for buffer commands.")
+(define-key glz/buffer-map "b" #'consult-buffer)
+(define-key glz/buffer-map "p" #'previous-buffer)
+(define-key glz/buffer-map "n" #'next-buffer)
+(define-key glz/buffer-map "k" #'kill-current-buffer)
 
-;; Jump to the most recent edit location (g; and g,)
-(use-package goto-chg
-  :commands (goto-last-change goto-last-change-reverse))
+(defvar glz/toggle-map (make-sparse-keymap) "Leader sub-keymap for toggles.")
+(define-key glz/toggle-map "l" #'display-line-numbers-mode)
 
-(use-package evil-mc
-  :after evil
+(defvar glz/org-map (make-sparse-keymap) "Leader sub-keymap for org commands.")
+(define-key glz/org-map "c" #'org-capture)
+
+(when glz/enable-testfall
+  (define-key glz/toggle-map "t" #'testfall-mode))
+
+(when glz/enable-org-roam
+  (defvar glz/org-roam-map (make-sparse-keymap) "Leader sub-keymap for org-roam.")
+  (define-key glz/org-roam-map "c" #'org-roam-capture)
+  (define-key glz/org-roam-map "f" #'org-roam-node-find)
+  (define-key glz/org-roam-map "i" #'org-roam-node-insert)
+  (define-key glz/org-roam-map "a" #'org-roam-node-insert-immediate)
+  (define-key glz/org-roam-map "u" #'org-roam-ui-open)
+  (define-key glz/org-roam-map "b" #'org-roam-buffer-toggle)
+  (define-key glz/org-map "r" glz/org-roam-map))
+
+(use-package meow
+  :ensure t
+  :demand t
   :config
-  (global-evil-mc-mode 1)
-  :bind (:map evil-insert-state-map
-              ("C->" . evil-mc-make-cursor-move-next-line)))
+  (setq meow-cheatsheet-layout meow-cheatsheet-layout-qwerty)
+
+  (meow-motion-overwrite-define-key
+   '("j" . meow-next)
+   '("k" . meow-prev)
+   '("<escape>" . ignore))
+
+  (meow-leader-define-key
+   '("." . find-file)
+   '("SPC" . project-find-file)
+   (cons "g" glz/git-map)
+   (cons "b" glz/buffer-map)
+   (cons "t" glz/toggle-map)
+   (cons "o" glz/org-map)
+   '("h" . "C-h")
+   '("p" . "C-x p")
+   '("c" . (lambda () (interactive)
+              (find-file (expand-file-name
+                          (concat user-emacs-directory "Config.org")))))
+   '("s" . eshell)
+   '("?" . meow-cheatsheet))
+
+  (meow-normal-define-key
+   '("0" . meow-expand-0)
+   '("9" . meow-expand-9)
+   '("8" . meow-expand-8)
+   '("7" . meow-expand-7)
+   '("6" . meow-expand-6)
+   '("5" . meow-expand-5)
+   '("4" . meow-expand-4)
+   '("3" . meow-expand-3)
+   '("2" . meow-expand-2)
+   '("1" . meow-expand-1)
+   '("-" . negative-argument)
+   '(";" . meow-reverse)
+   '("," . meow-inner-of-thing)
+   '("." . meow-bounds-of-thing)
+   '("[" . meow-beginning-of-thing)
+   '("]" . meow-end-of-thing)
+   '("a" . meow-append)
+   '("A" . meow-open-below)
+   '("b" . meow-back-word)
+   '("B" . meow-back-symbol)
+   '("c" . meow-change)
+   '("d" . meow-delete)
+   '("D" . meow-backward-delete)
+   '("e" . meow-next-word)
+   '("E" . meow-next-symbol)
+   '("f" . meow-find)
+   '("g" . meow-cancel-selection)
+   '("G" . meow-grab)
+   '("h" . meow-left)
+   '("H" . meow-left-expand)
+   '("i" . meow-insert)
+   '("I" . meow-open-above)
+   '("j" . meow-next)
+   '("J" . meow-next-expand)
+   '("k" . meow-prev)
+   '("K" . meow-prev-expand)
+   '("l" . meow-right)
+   '("L" . meow-right-expand)
+   '("m" . meow-join)
+   '("n" . meow-search)
+   '("o" . meow-block)
+   '("O" . meow-to-block)
+   '("p" . meow-yank)
+   '("q" . meow-quit)
+   '("Q" . meow-goto-line)
+   '("r" . meow-replace)
+   '("R" . meow-swap-grab)
+   '("s" . meow-kill)
+   '("t" . meow-till)
+   '("u" . meow-undo)
+   '("U" . meow-undo-in-selection)
+   '("v" . meow-visit)
+   '("w" . meow-mark-word)
+   '("W" . meow-mark-symbol)
+   '("x" . meow-line)
+   '("X" . meow-goto-line)
+   '("y" . meow-save)
+   '("Y" . meow-sync-grab)
+   '("z" . meow-pop-selection)
+   '("'" . repeat)
+   '("<escape>" . ignore))
+
+  (meow-setup-line-number)
+  (meow-global-mode 1))
 
 (defun glz/org-babel-tangle-config ()
   (when (and (buffer-file-name)
@@ -326,7 +376,7 @@
   (variable-pitch-mode 1)
   (auto-fill-mode 0)
   (visual-line-mode 1)
-  (setq evil-auto-indent nil))
+)
 
 (use-package org
   :commands (org-mode org-version)
@@ -527,7 +577,14 @@
 (use-package which-key
   :ensure nil
   :hook (after-init . which-key-mode)
-  :config (setq which-key-idle-delay 0.3))
+  :config
+  (setq which-key-idle-delay 0.3)
+  (which-key-add-keymap-based-replacements mode-specific-map
+    "g" "git"
+    "b" "buffers"
+    "t" "toggles"
+    "o" "org"
+    "o r" "org-roam"))
 
 (use-package helpful
   :commands (helpful-callable
@@ -554,69 +611,6 @@
 (when glz/enable-forge
   (use-package forge
     :after magit))
-
-(use-package general
-  :after evil
-  :config
-  (general-evil-setup t)
-  (general-auto-unbind-keys)
-  (general-create-definer glz/leader-key
-    :states '(normal insert visual emacs)
-    :keymaps 'override
-    :prefix "SPC"
-    :global-prefix "C-SPC")
-  (glz/leader-key
-    "." '("Find file in current directory" . find-file)
-    "SPC" '("Find file in project" . project-find-file)
-
-    ;; Git
-    "g" '(:ignore t :which-key "git")
-    "gg" '("Open Magit" . magit-status)
-
-    ;; Project
-    "p" '(:package project :keymap project-prefix-map :which-key "project")
-    "pp" '("Switch projects" . project-switch-project)
-
-    ;; Buffers
-    "b" '(:ignore t :which-key "buffers")
-    "bb" '("Switch buffers" . consult-buffer)
-    "bp" '("Previous buffer" . previous-buffer)
-    "bn" '("Next buffer" . next-buffer)
-    "bk" '("Kill current buffer" . kill-current-buffer)
-
-    ;; Help
-    "h" '(:package help :keymap help-map :which-key "help")
-
-    ;; Toggles
-    "t" '(:ignore t :which-key "toggles")
-    "tl" '("Toggle line numbers" . display-line-numbers-mode)
-
-    ;; Config
-    "c" '("Open Config" lambda () (interactive)
-          (find-file (expand-file-name (concat user-emacs-directory "Config.org"))))
-
-    ;; Org
-    "o" '(:ignore t :which-key "org")
-    "oc" '("Org capture" . org-capture)
-
-    ;; Shell
-    "s" '("Open eshell" . eshell))
-
-  ;; Testfall toggle — only registered when the mode is loaded
-  (when glz/enable-testfall
-    (glz/leader-key
-      "tt" '("Toggle testfall mode" . testfall-mode)))
-
-  ;; Org-Roam keybindings — only registered when org-roam is enabled
-  (when glz/enable-org-roam
-    (glz/leader-key
-      "or" '(:ignore t :which-key "org-roam")
-      "orc" '("Roam capture" . org-roam-capture)
-      "orf" '("Roam find" . org-roam-node-find)
-      "ori" '("Insert node" . org-roam-node-insert)
-      "ora" '("Immediate insertion" . org-roam-node-insert-immediate)
-      "oru" '("Open Graph" . org-roam-ui-open)
-      "orb" '("Open Backlinks" . org-roam-buffer-toggle))))
 
 (when glz/enable-nix
   (use-package nix-mode
