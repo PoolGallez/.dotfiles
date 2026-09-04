@@ -130,6 +130,12 @@ init.el forces fundamental-mode and nil message; override both here.
 (setq initial-scratch-message
       ";; This buffer is for text that is not saved, and for Lisp evaluation.\n;; To create a file, visit it with `\\[find-file]' and enter text in its buffer.\n\n")
 #+end_src
+*** System clipboard integration
+#+begin_src emacs-lisp
+;; Meow overrides select-enable-clipboard with its own variable inside meow-save.
+;; Setting meow-use-clipboard is the correct way to enable clipboard sync with Meow.
+(setq meow-use-clipboard t)
+#+end_src
 *** ESC quits prompts
 #+begin_src emacs-lisp
 (global-set-key (kbd "<escape>") 'keyboard-escape-quit)
@@ -220,6 +226,10 @@ These use-package blocks just activate the modes at the right time.
   :hook (after-init . save-place-mode)
   :init
   (setq save-place-limit 400))
+
+(use-package winner
+  :ensure nil
+  :hook (after-init . winner-mode))
 #+end_src
 *** Completion framework
 **** Vertico
@@ -348,39 +358,74 @@ Lightweight modal editing with selection-first design.  KEYPAD state (SPC)
 provides leader-key–style access to prefixed commands.  Beacon mode replaces
 evil-mc for multiple cursors.
 #+begin_src emacs-lisp
-(defvar glz/git-map (make-sparse-keymap) "Leader sub-keymap for git commands.")
+(define-prefix-command 'glz/git-map)
 (define-key glz/git-map "g" #'magit-status)
 
-(defvar glz/buffer-map (make-sparse-keymap) "Leader sub-keymap for buffer commands.")
+(define-prefix-command 'glz/buffer-map)
 (define-key glz/buffer-map "b" #'consult-buffer)
 (define-key glz/buffer-map "p" #'previous-buffer)
 (define-key glz/buffer-map "n" #'next-buffer)
 (define-key glz/buffer-map "k" #'kill-current-buffer)
 
-(defvar glz/toggle-map (make-sparse-keymap) "Leader sub-keymap for toggles.")
+(define-prefix-command 'glz/toggle-map)
 (define-key glz/toggle-map "l" #'display-line-numbers-mode)
 
-(defvar glz/org-map (make-sparse-keymap) "Leader sub-keymap for org commands.")
+(define-prefix-command 'glz/org-map)
 (define-key glz/org-map "c" #'org-capture)
+
+(define-prefix-command 'glz/window-map)
+;; Navigate
+(define-key glz/window-map "h" #'windmove-left)
+(define-key glz/window-map "j" #'windmove-down)
+(define-key glz/window-map "k" #'windmove-up)
+(define-key glz/window-map "l" #'windmove-right)
+;; Split
+(define-key glz/window-map "s" #'split-window-below)
+(define-key glz/window-map "v" #'split-window-right)
+;; Close
+(define-key glz/window-map "d" #'delete-window)
+(define-key glz/window-map "o" #'delete-other-windows)
+;; Resize (uppercase = grow/shrink in that direction, step 3)
+(define-key glz/window-map "H" (lambda () (interactive) (shrink-window-horizontally 3)))
+(define-key glz/window-map "L" (lambda () (interactive) (enlarge-window-horizontally 3)))
+(define-key glz/window-map "J" (lambda () (interactive) (enlarge-window 3)))
+(define-key glz/window-map "K" (lambda () (interactive) (shrink-window 3)))
+;; Balance
+(define-key glz/window-map "=" #'balance-windows)
+;; Swap two windows
+(define-key glz/window-map "x" #'window-swap-states)
+;; Undo / redo layout with winner-mode (SPC w u / SPC w r)
+(define-key glz/window-map "u" #'winner-undo)
+(define-key glz/window-map "r" #'winner-redo)
+;; Cycle to next window
+(define-key glz/window-map "w" #'other-window)
+
+;; Also reachable as C-w <key> (C-w is kill-region by default, but
+;; Meow covers that with 's' in normal mode so it's safe to repurpose).
+(global-set-key (kbd "C-w") 'glz/window-map)
 
 (when glz/enable-testfall
   (define-key glz/toggle-map "t" #'testfall-mode))
 
 (when glz/enable-org-roam
-  (defvar glz/org-roam-map (make-sparse-keymap) "Leader sub-keymap for org-roam.")
+  (define-prefix-command 'glz/org-roam-map)
   (define-key glz/org-roam-map "c" #'org-roam-capture)
   (define-key glz/org-roam-map "f" #'org-roam-node-find)
   (define-key glz/org-roam-map "i" #'org-roam-node-insert)
   (define-key glz/org-roam-map "a" #'org-roam-node-insert-immediate)
   (define-key glz/org-roam-map "u" #'org-roam-ui-open)
   (define-key glz/org-roam-map "b" #'org-roam-buffer-toggle)
-  (define-key glz/org-map "r" glz/org-roam-map))
+  (define-key glz/org-map "r" 'glz/org-roam-map))
 
 (use-package meow
   :ensure t
   :demand t
   :config
   (setq meow-cheatsheet-layout meow-cheatsheet-layout-qwerty)
+
+  ;; Free up 'g' for the git leader key.
+  ;; By default g = C-M- prefix; shift it to 'G' (SPC G <key> = C-M-<key>).
+  (setq meow-keypad-ctrl-meta-prefix ?G)
 
   (meow-motion-overwrite-define-key
    '("j" . meow-next)
@@ -390,10 +435,11 @@ evil-mc for multiple cursors.
   (meow-leader-define-key
    '("." . find-file)
    '("SPC" . project-find-file)
-   (cons "g" glz/git-map)
-   (cons "b" glz/buffer-map)
-   (cons "t" glz/toggle-map)
-   (cons "o" glz/org-map)
+   '("g" . glz/git-map)
+   '("b" . glz/buffer-map)
+   '("t" . glz/toggle-map)
+   '("o" . glz/org-map)
+   '("w" . glz/window-map)
    '("h" . "C-h")
    '("p" . "C-x p")
    '("c" . (lambda () (interactive)
@@ -715,12 +761,36 @@ Automatically tangle Config.org whenever it is saved, keeping all .el files in s
   :hook (after-init . which-key-mode)
   :config
   (setq which-key-idle-delay 0.3)
+
+  ;; Top-level leader descriptions (shown in the SPC popup).
+  ;; mode-specific-map is Meow's leader keymap, so SPC x = C-c x.
   (which-key-add-keymap-based-replacements mode-specific-map
     "g" "git"
     "b" "buffers"
     "t" "toggles"
     "o" "org"
-    "o r" "org-roam"))
+    "w" "windows")
+
+  (which-key-add-keymap-based-replacements glz/window-map
+    "h" "← left"      "j" "↓ down"       "k" "↑ up"         "l" "→ right"
+    "H" "← shrink"    "J" "↓ grow"       "K" "↑ shrink"     "L" "→ grow"
+    "s" "split ↓"     "v" "split →"
+    "d" "delete"      "o" "only this"    "x" "swap"
+    "=" "balance"     "w" "cycle"
+    "u" "undo layout" "r" "redo layout")
+
+  ;; Annotate each sub-keymap so pressing SPC g (etc.) shows hints.
+  (which-key-add-keymap-based-replacements glz/git-map
+    "g" "magit-status")
+  (which-key-add-keymap-based-replacements glz/buffer-map
+    "b" "consult-buffer"
+    "p" "previous-buffer"
+    "n" "next-buffer"
+    "k" "kill-buffer")
+  (which-key-add-keymap-based-replacements glz/toggle-map
+    "l" "line-numbers")
+  (which-key-add-keymap-based-replacements glz/org-map
+    "c" "org-capture"))
 #+end_src
 *** Helpful (better help screens)
 #+begin_src emacs-lisp
