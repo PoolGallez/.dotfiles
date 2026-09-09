@@ -726,4 +726,44 @@
     (if (file-exists-p f) (load-file f)
       (message "Warning: %s not found, skipping canape-par-mode" f))))
 
+(setq tramp-use-scp-direct-remote-copying t)
+(setq remote-file-name-inhibit-cache nil)
+(setq vc-handled-backends '(Git))
+(setq remote-file-name-inhibit-locks t)
+(setq remote-file-name-inhibit-auto-save-visited t)
+(setq tramp-copy-size-limit (* 1024 1024) ;; 1MB
+      tramp-verbose 2)
+
+(connection-local-set-profile-variables
+ 'my-dired-profile
+ '((dired-check-symlinks . nil)))
+
+
+(connection-local-set-profiles
+ '(:application tramp :machine "remotehost")
+ 'my-dired-profile)
+
+(connection-local-set-profile-variables
+ 'remote-direct-async-process
+ '((tramp-direct-async-process . t)))
+
+(connection-local-set-profiles
+ '(:application tramp :protocol "scp")
+ 'remote-direct-async-process)
+
+(with-eval-after-load 'tramp
+  (with-eval-after-load 'compile
+    (remove-hook 'compilation-mode-hook #'tramp-compile-disable-ssh-controlmaster-options)))
+
+(setq magit-tramp-pipe-stty-settings 'pty)
+
+(setq shell-history-file-name t)
+
+;; don't show the diff by default in the commit buffer. Use `C-c C-d' to display it
+(setq magit-commit-show-diff nil)
+;; don't show git variables in magit branch
+(setq magit-branch-direct-configure nil)
+;; don't automatically refresh the status buffer after running a git command
+(setq magit-refresh-status-buffer nil)
+
 (load custom-file 'noerror 'no-message)
