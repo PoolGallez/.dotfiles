@@ -7,12 +7,16 @@
         (t 'linux))
   "Current platform symbol: windows, linux, or android.")
 
-(defvar glz/enable-org-roam       (memq glz/platform '(linux)))
-(defvar glz/enable-forge          (memq glz/platform '(linux)))
-(defvar glz/enable-nix            (memq glz/platform '(linux)))
-(defvar glz/enable-testfall       (memq glz/platform '(windows)))
-(defvar glz/enable-anforderungen  (memq glz/platform '(windows)))
-(defvar glz/enable-canape-par     t)
+(defvar glz/enable-org-roam        (memq glz/platform '(linux)))
+(defvar glz/enable-forge           (memq glz/platform '(linux)))
+(defvar glz/enable-nix             (memq glz/platform '(linux)))
+(defvar glz/enable-testfall        (memq glz/platform '(windows)))
+(defvar glz/enable-anforderungen   (memq glz/platform '(windows)))
+(defvar glz/enable-canape-par      (memq glz/platform '(windows)))
+(defvar glz/enable-lsp-c           (memq glz/platform '(windows linux)))
+(defvar glz/enable-open-externally (memq glz/platform '(windows linux)))
+(defvar glz/enable-magit           (memq glz/platform '(windows linux)))
+(defvar glz/enable-pdf-tools       (memq glz/platform '(windows linux)))
 
 (defvar glz/org-directory
   (pcase glz/platform
@@ -28,6 +32,12 @@
     (when (file-directory-p git-bin)
       (add-to-list 'exec-path git-bin)
       (setenv "PATH" (concat git-bin ";" (getenv "PATH"))))))
+
+;; clangd for C/C++ LSP — adjust the path if your clangd.exe lives elsewhere.
+(let ((clangd-bin "C:/Tools/clangd_22.1.6/bin"))
+  (when (file-directory-p clangd-bin)
+    (add-to-list 'exec-path clangd-bin)
+    (setenv "PATH" (concat clangd-bin ";" (getenv "PATH")))))
 
 (defun glz/display-startup-time ()
   (message "Emacs loaded in %s with %d garbage collections."
@@ -59,6 +69,11 @@
 (setq meow-use-clipboard t)
 
 (global-set-key (kbd "<escape>") 'keyboard-escape-quit)
+
+(use-package mwheel
+  :ensure nil
+  :custom
+  (mouse-wheel-tilt-scroll t))
 
 (use-package compile-angel
   :demand t
@@ -137,6 +152,10 @@
   :ensure nil
   :hook (after-init . winner-mode))
 
+(use-package hl-line
+  :ensure nil
+  :hook (after-init . global-hl-line-mode))
+
 (use-package vertico
   :custom
   (vertico-scroll-margin 0)
@@ -157,6 +176,10 @@
   (completion-category-overrides '((file (styles partial-completion))))
   (completion-category-defaults nil)
   (completion-pcm-leading-wildcard t))
+
+(when-let* ((elc (locate-library "marginalia.elc")))
+  (when (< emacs-major-version 31)
+    (delete-file elc)))
 
 (use-package marginalia
   :after compat
@@ -180,12 +203,42 @@
   (add-to-list 'display-buffer-alist
                '("\\`\\*Embark Collect \\(Live\\|Completions\\)\\*"
                  nil
-                 (window-parameters (mode-line-format . none)))))
+                 (window-parameters (mode-line-format . none))))
+
+  ;; Copy path or name of a buffer to the kill ring from any buffer picker.
+  (defun glz/embark-copy-buffer-file-path (buffer)
+    "Copy the full file path (or buffer name) of BUFFER to the kill ring."
+    (interactive "bBuffer: ")
+    (when-let ((name (or (buffer-file-name (get-buffer buffer)) buffer)))
+      (kill-new name)
+      (message "Copied: %s" name)))
+
+  (defun glz/embark-copy-buffer-file-name (buffer)
+    "Copy just the file name (no directory) of BUFFER to the kill ring."
+    (interactive "bBuffer: ")
+    (let* ((path (or (buffer-file-name (get-buffer buffer)) buffer))
+           (name (file-name-nondirectory path)))
+      (kill-new name)
+      (message "Copied: %s" name)))
+
+  (define-prefix-command 'glz/embark-buffer-yank-map)
+  (define-key embark-buffer-map "y" 'glz/embark-buffer-yank-map)
+  (define-key glz/embark-buffer-yank-map "p" #'glz/embark-copy-buffer-file-path)
+  (define-key glz/embark-buffer-yank-map "n" #'glz/embark-copy-buffer-file-name))
 
 (use-package embark-consult
   :hook (embark-collect-mode . consult-preview-at-point-mode))
 
 (use-package consult
+  :init
+  ;; glz/buffer-map is declared in use-package meow which appears later in the
+  ;; file; defer the binding until meow has loaded (meow has :demand t so this
+  ;; fires during the same startup sequence, just after meow's use-package).
+  (with-eval-after-load 'meow
+    (define-key glz/buffer-map "b" #'consult-buffer)
+    (with-eval-after-load 'which-key
+      (which-key-add-keymap-based-replacements glz/buffer-map
+        "b" "consult-buffer")))
   :bind (("C-c M-x" . consult-mode-command)
          ("C-c h" . consult-history)
          ("C-c k" . consult-kmacro)
@@ -248,84 +301,102 @@
   (setq consult-narrow-key "<")
   (keymap-set consult-narrow-map (concat consult-narrow-key " ?") #'consult-narrow-help))
 
-(define-prefix-command 'glz/git-map)
-(define-key glz/git-map "g" #'magit-status)
-
-(define-prefix-command 'glz/buffer-map)
-(define-key glz/buffer-map "b" #'consult-buffer)
-(define-key glz/buffer-map "p" #'previous-buffer)
-(define-key glz/buffer-map "n" #'next-buffer)
-(define-key glz/buffer-map "k" #'kill-current-buffer)
-
-(define-prefix-command 'glz/toggle-map)
-(define-key glz/toggle-map "l" #'display-line-numbers-mode)
-
-(define-prefix-command 'glz/org-map)
-(define-key glz/org-map "c" #'org-capture)
-(define-key glz/org-map "a" #'org-agenda)
-(define-key glz/org-map "o" #'org-open-at-point)
-(define-key glz/org-map "l" #'org-insert-link)
-(define-key glz/org-map "t" #'org-todo)
-(define-key glz/org-map "s" #'org-schedule)
-(define-key glz/org-map "d" #'org-deadline)
-(define-key glz/org-map "R" #'org-refile)
-(define-key glz/org-map "p" #'org-priority)
-(define-key glz/org-map "x" #'org-toggle-checkbox)
-(define-key glz/org-map "T" #'org-set-tags-command)
-(define-key glz/org-map "n" #'org-toggle-narrow-to-subtree)
-
-(define-prefix-command 'glz/window-map)
-;; Navigate
-(define-key glz/window-map "h" #'windmove-left)
-(define-key glz/window-map "j" #'windmove-down)
-(define-key glz/window-map "k" #'windmove-up)
-(define-key glz/window-map "l" #'windmove-right)
-;; Split
-(define-key glz/window-map "s" #'split-window-below)
-(define-key glz/window-map "v" #'split-window-right)
-;; Close
-(define-key glz/window-map "d" #'delete-window)
-(define-key glz/window-map "o" #'delete-other-windows)
-;; Resize (uppercase = grow/shrink in that direction, step 3)
-(define-key glz/window-map "H" (lambda () (interactive) (shrink-window-horizontally 3)))
-(define-key glz/window-map "L" (lambda () (interactive) (enlarge-window-horizontally 3)))
-(define-key glz/window-map "J" (lambda () (interactive) (enlarge-window 3)))
-(define-key glz/window-map "K" (lambda () (interactive) (shrink-window 3)))
-;; Balance
-(define-key glz/window-map "=" #'balance-windows)
-;; Swap two windows
-(define-key glz/window-map "x" #'window-swap-states)
-;; Undo / redo layout with winner-mode (SPC w u / SPC w r)
-(define-key glz/window-map "u" #'winner-undo)
-(define-key glz/window-map "r" #'winner-redo)
-;; Cycle to next window
-(define-key glz/window-map "w" #'other-window)
-
-;; Also reachable as C-w <key> (C-w is kill-region by default, but
-;; Meow covers that with 's' in normal mode so it's safe to repurpose).
-(global-set-key (kbd "C-w") 'glz/window-map)
-
-(when glz/enable-testfall
-  (define-key glz/toggle-map "t" #'testfall-mode))
-
-(when glz/enable-org-roam
-  (define-prefix-command 'glz/org-roam-map)
-  (define-key glz/org-roam-map "c" #'org-roam-capture)
-  (define-key glz/org-roam-map "f" #'org-roam-node-find)
-  (define-key glz/org-roam-map "i" #'org-roam-node-insert)
-  (define-key glz/org-roam-map "a" #'org-roam-node-insert-immediate)
-  (define-key glz/org-roam-map "u" #'org-roam-ui-open)
-  (define-key glz/org-roam-map "b" #'org-roam-buffer-toggle)
-  (define-key glz/org-map "r" 'glz/org-roam-map))
-
 (use-package meow
   :ensure t
   :demand t
+  :init
+  ;; --- Leader sub-maps ---
+  ;; Declared in :init so they exist before any with-eval-after-load 'meow
+  ;; callback fires.  eval-after-load runs inside (require 'meow) — before
+  ;; :config — so anything those callbacks reference must be set up here.
+  (define-prefix-command 'glz/git-map)
+  (define-prefix-command 'glz/git-ediff-map)
+  (define-prefix-command 'glz/smerge-map)
+
+  (defun glz/copy-buffer-file-path ()
+    "Copy the current buffer's full file path (or buffer name) to the kill ring."
+    (interactive)
+    (let ((name (or (buffer-file-name) (buffer-name))))
+      (kill-new name)
+      (message "Copied: %s" name)))
+
+  (defun glz/copy-buffer-file-name ()
+    "Copy just the file name (no directory) of the current buffer to the kill ring."
+    (interactive)
+    (let ((name (file-name-nondirectory (or (buffer-file-name) (buffer-name)))))
+      (kill-new name)
+      (message "Copied: %s" name)))
+
+  (define-prefix-command 'glz/buffer-yank-map)
+
+  (defun glz/isearch-region ()
+    "Search forward for the text of the active region using isearch."
+    (interactive)
+    (when (use-region-p)
+      (let ((text (buffer-substring-no-properties (region-beginning) (region-end))))
+        (deactivate-mark)
+        (isearch-mode t)
+        (isearch-yank-string text))))
+
+  (define-prefix-command 'glz/buffer-map)
+  (define-key glz/buffer-map "p" #'previous-buffer)
+  (define-key glz/buffer-map "n" #'next-buffer)
+  (define-key glz/buffer-map "k" #'kill-current-buffer)
+  (define-key glz/buffer-map "y" 'glz/buffer-yank-map)
+  (define-key glz/buffer-yank-map "p" #'glz/copy-buffer-file-path)
+  (define-key glz/buffer-yank-map "n" #'glz/copy-buffer-file-name)
+
+  (define-prefix-command 'glz/toggle-map)
+  (define-key glz/toggle-map "l" #'display-line-numbers-mode)
+
+  (define-prefix-command 'glz/org-map)
+  (define-key glz/org-map "j" #'org-next-visible-heading)
+  (define-key glz/org-map "k" #'org-previous-visible-heading)
+  (define-key glz/org-map "J" #'org-forward-heading-same-level)
+  (define-key glz/org-map "K" #'org-backward-heading-same-level)
+  (define-key glz/org-map "u" #'outline-up-heading)
+  (define-key glz/org-map "g" #'org-goto)
+  (define-key glz/org-map "/" #'org-sparse-tree)
+  (define-key glz/org-map (kbd "TAB") #'org-cycle)
+
+  (define-prefix-command 'glz/window-map)
+  (define-key glz/window-map "h" #'windmove-left)
+  (define-key glz/window-map "j" #'windmove-down)
+  (define-key glz/window-map "k" #'windmove-up)
+  (define-key glz/window-map "l" #'windmove-right)
+  (define-key glz/window-map "s" #'split-window-below)
+  (define-key glz/window-map "v" #'split-window-right)
+  (define-key glz/window-map "d" #'delete-window)
+  (define-key glz/window-map "o" #'delete-other-windows)
+  ;; Resize: uppercase = grow/shrink in that direction, step 3
+  (define-key glz/window-map "H" (lambda () (interactive) (shrink-window-horizontally 3)))
+  (define-key glz/window-map "L" (lambda () (interactive) (enlarge-window-horizontally 3)))
+  (define-key glz/window-map "J" (lambda () (interactive) (enlarge-window 3)))
+  (define-key glz/window-map "K" (lambda () (interactive) (shrink-window 3)))
+  (define-key glz/window-map "=" #'balance-windows)
+  (define-key glz/window-map "x" #'window-swap-states)
+  (define-key glz/window-map "u" #'winner-undo)
+  (define-key glz/window-map "r" #'winner-redo)
+  (define-key glz/window-map "w" #'other-window)
+  ;; Window map is accessible via SPC w (meow leader); don't override C-w
+  ;; globally — meow-kill ('s') relies on kill-region living at C-w.
+
+  (when glz/enable-testfall
+    (define-key glz/toggle-map "t" #'testfall-mode))
+
+  (when glz/enable-org-roam
+    (define-prefix-command 'glz/org-roam-map)
+    (define-key glz/org-roam-map "c" #'org-roam-capture)
+    (define-key glz/org-roam-map "f" #'org-roam-node-find)
+    (define-key glz/org-roam-map "i" #'org-roam-node-insert)
+    (define-key glz/org-roam-map "a" #'org-roam-node-insert-immediate)
+    (define-key glz/org-roam-map "u" #'org-roam-ui-open)
+    (define-key glz/org-roam-map "b" #'org-roam-buffer-toggle)
+    (define-key glz/org-map "r" 'glz/org-roam-map))
+
   :config
   (setq meow-cheatsheet-layout meow-cheatsheet-layout-qwerty)
-
-  ;; Free up 'g' for the git leader key.
-  ;; By default g = C-M- prefix; shift it to 'G' (SPC G <key> = C-M-<key>).
+  ;; Free up 'g' for the git leader key; shift C-M- prefix to 'G'.
   (setq meow-keypad-ctrl-meta-prefix ?G)
 
   (meow-motion-overwrite-define-key
@@ -347,6 +418,7 @@
               (find-file (expand-file-name
                           (concat user-emacs-directory "Config.org")))))
    '("s" . eshell)
+   '("/" . glz/isearch-region)
    '("?" . meow-cheatsheet))
 
   (meow-normal-define-key
@@ -410,9 +482,16 @@
    '("Y" . meow-sync-grab)
    '("z" . meow-pop-selection)
    '("'" . repeat)
+   '("*" . glz/isearch-region)
    '("<escape>" . ignore))
 
   (meow-setup-line-number)
+  ;; meow--toggle-relative-line-number sets display-line-numbers to t in
+  ;; insert mode.  Override it so relative numbers are kept in every state.
+  (advice-add 'meow--toggle-relative-line-number :override
+              (lambda ()
+                (when display-line-numbers
+                  (setq display-line-numbers 'relative))))
   (meow-global-mode 1))
 
 (defun glz/org-babel-tangle-config ()
@@ -425,6 +504,24 @@
           (lambda ()
             (add-hook 'after-save-hook #'glz/org-babel-tangle-config nil t)))
 
+;; Text-properties folding is significantly faster than overlay folding for
+;; large org files; safe to set globally.
+(setq org-fold-core-style 'text-properties)
+
+(defun glz/requirements-org-perf ()
+  "Disable expensive display features for the generated requirements.org."
+  (when (and buffer-file-name
+             (string-match-p "requirements\\.org\\'" buffer-file-name))
+    (org-indent-mode -1)
+    (variable-pitch-mode -1)
+    (when (bound-and-true-p visual-fill-column-mode)
+      (visual-fill-column-mode -1))
+    (setq-local truncate-lines t)
+    (setq-local jit-lock-defer-time 0.25)
+    (read-only-mode 1)))
+
+(add-hook 'org-mode-hook #'glz/requirements-org-perf)
+
 (defun glz/org-mode-setup ()
   "Personal adjustments for org-mode."
   (org-indent-mode)
@@ -436,10 +533,34 @@
 (use-package org
   :commands (org-mode org-version)
   :mode ("\\.org\\'" . org-mode)
+  :init
+  (define-key glz/org-map "c" #'org-capture)
+  (with-eval-after-load 'which-key
+    (which-key-add-keymap-based-replacements glz/org-map
+      "c" "org-capture"))
   :hook (org-mode . glz/org-mode-setup)
   :config
   (setq org-ellipsis " ▾"
         org-hide-emphasis-markers t)
+
+  ;; ── Quick heading motions (M- modifier, org buffers only) ───────────
+  ;; Mirrors j/k/h/l from Meow normal state but operates on headings.
+  (define-key org-mode-map (kbd "M-j") #'org-next-visible-heading)
+  (define-key org-mode-map (kbd "M-k") #'org-previous-visible-heading)
+  (define-key org-mode-map (kbd "M-J") #'org-forward-heading-same-level)
+  (define-key org-mode-map (kbd "M-K") #'org-backward-heading-same-level)
+  (define-key org-mode-map (kbd "M-h") #'outline-up-heading)
+  (define-key org-mode-map (kbd "M-l") #'org-goto)
+
+  ;; Register "subtree" as a Meow thing so `. s` selects the current subtree
+  ;; and `[ s` / `] s` jump to its beginning/end.
+  (meow-thing-register 'subtree
+                       '(org-back-to-heading . meow--org-subtree-end)
+                       '(org-back-to-heading . meow--org-subtree-end))
+  (defun meow--org-subtree-end ()
+    (org-end-of-subtree t)
+    (point))
+  (add-to-list 'meow-char-thing-table '(?s . subtree))
 
   ;; Fixed-pitch faces for code and special elements
   (require 'org-indent)
@@ -471,6 +592,82 @@
                           '(("^ *\\([-]\\) "
                              (0 (prog1 () (compose-region (match-beginning 1)
                                                           (match-end 1) "•"))))))
+
+  ;; Directories and agenda files
+  (setq org-directory glz/org-directory)
+  (setq org-agenda-files '("Tasks.org" "Birthdays.org" "Calendar.org"))
+
+  ;; org-roam only indexes org-directory/roam/, so id: links to/from the
+  ;; course notes in org-directory/Notes/ (index + chapter files) need
+  ;; org-id to know about that tree separately, or they fail to resolve.
+  (setq org-id-extra-files
+        (directory-files-recursively (concat org-directory "Notes/") "\\.org$"))
+
+  ;; Task management
+  (setq org-agenda-start-with-log-mode t)
+  (setq org-log-done 'time)
+  (setq org-log-into-drawer t)
+
+  (setq org-todo-keywords
+        '((sequence "TODO(t)" "NEXT(n)" "|" "DONE(d!)")
+          (sequence "IDEA(i)" "DISCUSSION(d)" "ANALYSIS(a)" "IN WORK(w)" "|" "DONE(d!)" "CANCELLED(c!)")))
+
+  (setq org-agenda-custom-commands
+        '(("d" "Dashboard"
+           ((agenda "" ((org-deadline-warning-days 7)))
+            (todo "NEXT"
+                  ((org-agenda-overriding-header "Next Tasks")))
+            (tags-todo "agenda/ACTIVE" ((org-agenda-overriding-header "Active Projects")))))
+
+          ("n" "Next Tasks"
+           ((todo "NEXT"
+                  ((org-agenda-overriding-header "Next Tasks")))))
+
+          ("W" "Work Tasks" tags-todo "+work")
+
+          ("e" tags-todo "+TODO=\"NEXT\"+Effort<15&+Effort>0"
+           ((org-agenda-overriding-header "Low Effort Tasks")
+            (org-agenda-max-todos 20)
+            (org-agenda-files org-agenda-files)))
+
+          ("w" "Workflow Status"
+           ((todo "WAIT"
+                  ((org-agenda-overriding-header "Waiting on External")
+                   (org-agenda-files org-agenda-files)))
+            (todo "REVIEW"
+                  ((org-agenda-overriding-header "In Review")
+                   (org-agenda-files org-agenda-files)))
+            (todo "PLAN"
+                  ((org-agenda-overriding-header "In Planning")
+                   (org-agenda-todo-list-sublevels nil)
+                   (org-agenda-files org-agenda-files)))
+            (todo "BACKLOG"
+                  ((org-agenda-overriding-header "Project Backlog")
+                   (org-agenda-todo-list-sublevels nil)
+                   (org-agenda-files org-agenda-files)))
+            (todo "READY"
+                  ((org-agenda-overriding-header "Ready for Work")
+                   (org-agenda-files org-agenda-files)))
+            (todo "ACTIVE"
+                  ((org-agenda-overriding-header "Active Projects")
+                   (org-agenda-files org-agenda-files)))
+            (todo "COMPLETED"
+                  ((org-agenda-overriding-header "Completed Projects")
+                   (org-agenda-files org-agenda-files)))
+            (todo "CANC"
+                  ((org-agenda-overriding-header "Cancelled Projects")
+                   (org-agenda-files org-agenda-files)))))))
+
+  (setq org-refile-targets '(("Archive.org" :maxlevel . 1)))
+  (advice-add 'org-refile :after 'org-save-all-org-buffers)
+
+  ;; Capture templates
+  (setq org-capture-templates
+        `(("t" "Task" entry (file+olp ,(concat glz/org-directory "Tasks.org") "Tasks")
+           "* TODO %?\n  %U\n  %a\n  %i")
+          ("b" "Birthday" entry (file ,(concat glz/org-directory "Birthdays.org"))
+           "* %?\n  %^t\n %i")))
+
   :custom
   (org-hide-leading-stars t)
   (org-startup-indented t)
@@ -499,82 +696,14 @@
 ;; Lets file: links with a page number (e.g. file:paper.pdf::12, as used
 ;; by the co00/co01/... links in the course notes) open the PDF at that
 ;; page, with proper vector rendering, search and annotations.
-(use-package pdf-tools
-  :magic ("%PDF" . pdf-view-mode)
-  :config
-  (pdf-tools-install :no-query))
-
-(setq org-directory glz/org-directory)
-(setq org-agenda-files '("Tasks.org" "Birthdays.org" "Calendar.org"))
-
-;; org-roam only indexes org-directory/roam/, so id: links to/from the
-;; course notes in org-directory/Notes/ (index + chapter files) need
-;; org-id to know about that tree separately, or they fail to resolve.
-(setq org-id-extra-files
-      (directory-files-recursively (concat org-directory "Notes/") "\\.org$"))
-
-(setq org-agenda-start-with-log-mode t)
-(setq org-log-done 'time)
-(setq org-log-into-drawer t)
-
-(setq org-todo-keywords
-      '((sequence "TODO(t)" "NEXT(n)" "|" "DONE(d!)")
-        (sequence "IDEA(i)" "DISCUSSION(d)" "ANALYSIS(a)" "IN WORK(w)" "|" "DONE(d!)" "CANCELLED(c!)")))
-
-(setq org-agenda-custom-commands
-      '(("d" "Dashboard"
-         ((agenda "" ((org-deadline-warning-days 7)))
-          (todo "NEXT"
-                ((org-agenda-overriding-header "Next Tasks")))
-          (tags-todo "agenda/ACTIVE" ((org-agenda-overriding-header "Active Projects")))))
-
-        ("n" "Next Tasks"
-         ((todo "NEXT"
-                ((org-agenda-overriding-header "Next Tasks")))))
-
-        ("W" "Work Tasks" tags-todo "+work")
-
-        ("e" tags-todo "+TODO=\"NEXT\"+Effort<15&+Effort>0"
-         ((org-agenda-overriding-header "Low Effort Tasks")
-          (org-agenda-max-todos 20)
-          (org-agenda-files org-agenda-files)))
-
-        ("w" "Workflow Status"
-         ((todo "WAIT"
-                ((org-agenda-overriding-header "Waiting on External")
-                 (org-agenda-files org-agenda-files)))
-          (todo "REVIEW"
-                ((org-agenda-overriding-header "In Review")
-                 (org-agenda-files org-agenda-files)))
-          (todo "PLAN"
-                ((org-agenda-overriding-header "In Planning")
-                 (org-agenda-todo-list-sublevels nil)
-                 (org-agenda-files org-agenda-files)))
-          (todo "BACKLOG"
-                ((org-agenda-overriding-header "Project Backlog")
-                 (org-agenda-todo-list-sublevels nil)
-                 (org-agenda-files org-agenda-files)))
-          (todo "READY"
-                ((org-agenda-overriding-header "Ready for Work")
-                 (org-agenda-files org-agenda-files)))
-          (todo "ACTIVE"
-                ((org-agenda-overriding-header "Active Projects")
-                 (org-agenda-files org-agenda-files)))
-          (todo "COMPLETED"
-                ((org-agenda-overriding-header "Completed Projects")
-                 (org-agenda-files org-agenda-files)))
-          (todo "CANC"
-                ((org-agenda-overriding-header "Cancelled Projects")
-                 (org-agenda-files org-agenda-files)))))))
-
-(setq org-refile-targets '(("Archive.org" :maxlevel . 1)))
-(advice-add 'org-refile :after 'org-save-all-org-buffers)
-
-(setq org-capture-templates
-      `(("t" "Task" entry (file+olp ,(concat glz/org-directory "Tasks.org") "Tasks")
-         "* TODO %?\n  %U\n  %a\n  %i")
-        ("b" "Birthday" entry (file ,(concat glz/org-directory "Birthdays.org"))
-         "* %?\n  %^t\n %i")))
+;; pdf-tools compiles a native helper (epdfinfo) at install time, which
+;; needs a C toolchain that a phone build of Emacs is unlikely to have;
+;; skip it on Android and fall back to Emacs's built-in doc-view instead.
+(when glz/enable-pdf-tools
+  (use-package pdf-tools
+    :magic ("%PDF" . pdf-view-mode)
+    :config
+    (pdf-tools-install :no-query)))
 
 (when glz/enable-org-roam
   (use-package org-roam
@@ -636,22 +765,85 @@
 (use-package all-the-icons-dired
   :hook (dired-mode . all-the-icons-dired-mode))
 
-(setq ediff-keep-variants nil)
-(setq ediff-make-buffers-readonly-at-startup nil)
-(setq ediff-merge-revisions-with-ancestor t)
-(setq ediff-show-clashes-only t)
-(setq ediff-split-window-function 'split-window-horizontally)
-(setq ediff-window-setup-function 'ediff-setup-windows-plain)
+(when glz/enable-magit
+(use-package ediff
+  :ensure nil
+  :defer t
+  :config
+  (setq ediff-keep-variants nil)
+  (setq ediff-make-buffers-readonly-at-startup nil)
+  (setq ediff-merge-revisions-with-ancestor t)
+  (setq ediff-show-clashes-only t)
+  (setq ediff-split-window-function 'split-window-horizontally)
+  (setq ediff-window-setup-function 'ediff-setup-windows-plain)
+  ;; On Windows, prefer the Git-bundled diff/diff3 as an explicit fallback.
+  (when (eq glz/platform 'windows)
+    (let ((diff  (or (executable-find "diff")
+                     "C:/Program Files/Git/usr/bin/diff.exe"))
+          (diff3 (or (executable-find "diff3")
+                     "C:/Program Files/Git/usr/bin/diff3.exe")))
+      (setq ediff-diff-program  diff
+            ediff-diff3-program diff3)))
 
-;; On Windows, prefer the Git-bundled diff/diff3 as an explicit fallback
-;; in case exec-path doesn't resolve them yet when ediff loads.
-(when (eq glz/platform 'windows)
-  (let ((diff  (or (executable-find "diff")
-                   "C:/Program Files/Git/usr/bin/diff.exe"))
-        (diff3 (or (executable-find "diff3")
-                   "C:/Program Files/Git/usr/bin/diff3.exe")))
-    (setq ediff-diff-program  diff
-          ediff-diff3-program diff3)))
+  ;; Put the ediff control buffer in motion state so SPC leader works
+  ;; while ediff's single-key commands still fall through.
+  (add-hook 'ediff-mode-hook
+            (lambda ()
+              (meow-mode 1)
+              (meow--switch-state 'motion)))
+
+  ;; Track whether an ediff session is active so the auto-restore hook
+  ;; (below) does not undo ediff's deliberate motion-state setup.
+  (defvar glz/ediff-in-progress nil
+    "Non-nil while an ediff session is active.")
+
+  (defun glz/meow-suspend-for-ediff ()
+    "Switch diff buffers to motion state so ediff keys pass through."
+    (dolist (buf (list ediff-buffer-A ediff-buffer-B ediff-buffer-C
+                       ediff-ancestor-buffer))
+      (when (buffer-live-p buf)
+        (with-current-buffer buf
+          (meow--switch-state 'motion)
+          ;; meow-setup-line-number sets type to t in motion state;
+          ;; override it so relative numbers are preserved during ediff.
+          (setq-local display-line-numbers-type 'relative)))))
+
+  (defun glz/meow-restore-after-ediff ()
+    "Restore normal state in diff buffers after ediff exits."
+    (setq glz/ediff-in-progress nil)
+    (dolist (buf (list ediff-buffer-A ediff-buffer-B ediff-buffer-C
+                       ediff-ancestor-buffer))
+      (when (buffer-live-p buf)
+        (with-current-buffer buf (meow--switch-state 'normal))))
+    ;; ediff restores the window configuration after this hook returns,
+    ;; so the buffer the user lands in may not be in the list above.
+    ;; Defer a final normal-state switch until ediff fully exits.
+    (run-with-idle-timer 0 nil
+                         (lambda ()
+                           (when (bound-and-true-p meow-mode)
+                             (meow--switch-state 'normal)))))
+
+  ;; Auto-restore normal state when selecting any regular file buffer
+  ;; that ended up in motion state (e.g. after ediff or magit navigation).
+  (defun glz/meow-normal-on-file-select (&optional _frame)
+    "Switch to normal meow state when a writable file buffer is selected.
+Skipped while ediff is active so the motion-state setup there is
+not immediately undone."
+    (when (and (not glz/ediff-in-progress)
+               (bound-and-true-p meow-mode)
+               buffer-file-name
+               (not buffer-read-only)
+               (eq meow--current-state 'motion))
+      (meow--switch-state 'normal)))
+
+  (add-hook 'window-selection-change-functions #'glz/meow-normal-on-file-select)
+
+  ;; Set the flag BEFORE buffers are prepared so after-change-major-mode-hook
+  ;; in testfall sees it and skips the mode re-apply during ediff setup.
+  (add-hook 'ediff-before-setup-hook (lambda () (setq glz/ediff-in-progress t)))
+  (add-hook 'ediff-startup-hook  #'glz/meow-suspend-for-ediff)
+  (add-hook 'ediff-quit-hook     #'glz/meow-restore-after-ediff)
+  (add-hook 'ediff-suspend-hook  #'glz/meow-restore-after-ediff)))
 
 (use-package rainbow-delimiters
   :hook (prog-mode . rainbow-delimiters-mode))
@@ -679,24 +871,23 @@
     "=" "balance"     "w" "cycle"
     "u" "undo layout" "r" "redo layout")
 
-  ;; Annotate each sub-keymap so pressing SPC g (etc.) shows hints.
-  (which-key-add-keymap-based-replacements glz/git-map
-    "g" "magit-status")
   (which-key-add-keymap-based-replacements glz/buffer-map
-    "b" "consult-buffer"
     "p" "previous-buffer"
     "n" "next-buffer"
-    "k" "kill-buffer")
-  (which-key-add-keymap-based-replacements glz/toggle-map
-    "l" "line-numbers")
+    "k" "kill-buffer"
+    "y" "yank →")
+  (which-key-add-keymap-based-replacements glz/buffer-yank-map
+    "p" "yank full path"
+    "n" "yank file name")
   (which-key-add-keymap-based-replacements glz/org-map
-    "c" "capture"        "a" "agenda"
-    "o" "open link"      "l" "insert link"
-    "t" "todo state"     "s" "schedule"
-    "d" "deadline"       "R" "refile"
-    "p" "priority"       "x" "toggle checkbox"
-    "T" "tags"           "n" "narrow subtree"
-    "r" "org-roam"))
+    "j" "↓ next heading"    "k" "↑ prev heading"
+    "J" "↓ next sibling"    "K" "↑ prev sibling"
+    "u" "↑ parent"          "g" "goto heading"
+    "/" "sparse tree"        "TAB" "cycle fold"
+    "c" "capture")
+
+  (which-key-add-keymap-based-replacements glz/toggle-map
+    "l" "line-numbers"))
 
 (use-package helpful
   :commands (helpful-callable
@@ -715,10 +906,163 @@
 (use-package no-littering
   :demand t)
 
+(when glz/enable-magit
 (use-package magit
   :commands (magit-status magit-get-current-branch)
+  :init
+  ;; :init runs at startup regardless of when magit actually loads, so the
+  ;; SPC g map is populated immediately.  Function symbols are autoloaded,
+  ;; so pressing a key loads magit on demand.
+  (define-key glz/git-map "g" #'magit-status)
+  (define-key glz/git-map "b" #'magit-blame-addition)
+  (define-key glz/git-map "B" #'magit-branch)
+  (define-key glz/git-map "c" #'magit-commit)
+  (define-key glz/git-map "d" #'magit-diff-buffer-file)
+  (define-key glz/git-map "D" #'magit-diff-working-tree)
+  (define-key glz/git-map "f" #'magit-fetch-all)
+  (define-key glz/git-map "F" #'magit-find-file)
+  (define-key glz/git-map "l" #'magit-log-buffer-file)
+  (define-key glz/git-map "L" #'magit-log-current)
+  (define-key glz/git-map "p" #'magit-push)
+  (define-key glz/git-map "P" #'magit-pull)
+  (define-key glz/git-map "r" #'magit-rebase)
+  (define-key glz/git-map "s" #'magit-stash)
+  (define-key glz/git-map "t" #'magit-tag)
+  (define-key glz/git-ediff-map "e" #'magit-ediff-compare)
+  (define-key glz/git-ediff-map "w" #'magit-ediff-show-working-tree)
+  (define-key glz/git-ediff-map "s" #'magit-ediff-show-staged)
+  (define-key glz/git-ediff-map "c" #'magit-ediff-show-commit)
+  (define-key glz/git-map "e" 'glz/git-ediff-map)
+  (define-key glz/git-map "m" 'glz/smerge-map)
+  (with-eval-after-load 'which-key
+    (which-key-add-keymap-based-replacements glz/git-map
+      "g" "status"
+      "b" "blame"
+      "B" "branch"
+      "c" "commit"
+      "d" "diff file"
+      "D" "diff worktree"
+      "e" "ediff →"
+      "f" "fetch all"
+      "F" "find file@rev"
+      "l" "log file"
+      "L" "log branch"
+      "m" "merge →"
+      "p" "push"
+      "P" "pull"
+      "r" "rebase"
+      "s" "stash"
+      "t" "tag")
+    (which-key-add-keymap-based-replacements glz/git-ediff-map
+      "e" "compare refs"
+      "w" "working tree"
+      "s" "staged"
+      "c" "commit"))
   :custom
-  (magit-display-buffer-function #'magit-display-buffer-same-window-except-diff-v1))
+  (magit-display-buffer-function #'magit-display-buffer-same-window-except-diff-v1)
+  :config
+  ;; In a dedicated diff buffer (SPC g d), open the visited file in the
+  ;; other window so the diff stays visible.  In the status buffer, keep
+  ;; the original same-window behaviour (opening ~index~ snapshots etc.).
+  (defun glz/magit-visit-thing ()
+    (interactive)
+    (if (derived-mode-p 'magit-diff-mode)
+        (magit-diff-visit-file-other-window)
+      (magit-diff-visit-file)))
+  (keymap-set magit-diff-section-map "<remap> <magit-visit-thing>"
+              #'glz/magit-visit-thing)
+  ;; Show unstaged/staged files grouped by type within the single collapsible
+  ;; section.  Multiple magit--insert-diff calls with --diff-filter emit files
+  ;; in the desired order; all magit operations (stage, discard, ediff…) keep
+  ;; working because sections still use the original 'unstaged / 'staged types.
+  (defun glz/magit-insert-unstaged-changes ()
+    "Unstaged changes in one section, grouped: modified → deleted → renamed → unmerged.
+Each filter runs in an inner (unstaged) section so that when git produces no
+output for that filter magit-cancel-section only throws out of the inner catch,
+leaving the outer section and heading intact."
+    (when (magit-anything-unstaged-p)
+      (magit-insert-section (unstaged)
+        (magit-insert-heading "Unstaged changes")
+        (dolist (filter '("M" "D" "R" "U"))
+          (magit-insert-section (unstaged)
+            (magit--insert-diff nil
+              "diff" magit-buffer-diff-args "--no-prefix"
+              (concat "--diff-filter=" filter)
+              "--" magit-buffer-diff-files))))))
+
+  (defun glz/magit-insert-staged-changes ()
+    "Staged changes in one section, grouped: added → modified → deleted → renamed."
+    (unless (magit-bare-repo-p)
+      (when (magit-anything-staged-p)
+        (magit-insert-section (staged)
+          (magit-insert-heading "Staged changes")
+          (dolist (filter '("A" "M" "D" "R"))
+            (magit-insert-section (staged)
+              (magit--insert-diff nil
+                "diff" "--cached" magit-buffer-diff-args "--no-prefix"
+                (concat "--diff-filter=" filter)
+                "--" magit-buffer-diff-files)))))))
+
+  (advice-add 'magit-insert-unstaged-changes :override #'glz/magit-insert-unstaged-changes)
+  (advice-add 'magit-insert-staged-changes   :override #'glz/magit-insert-staged-changes)))
+
+(use-package project
+  :ensure nil
+  :custom
+  (project-switch-commands
+   `((project-find-file    "Find file")
+     (project-find-regexp  "Find regexp")
+     (project-find-dir     "Find directory")
+     ,@(when glz/enable-magit '((magit-project-status "Magit" ?g)))
+     (project-eshell       "Eshell")))
+  :config
+  (when glz/enable-magit
+    (keymap-set project-prefix-map "g" #'magit-project-status)))
+
+(when glz/enable-magit
+(use-package smerge-mode
+  :ensure nil
+  :commands smerge-mode
+  :config
+  ;; Mirror ediff's colour scheme so smerge and ediff feel visually identical.
+  ;; Inherit from ediff faces so the theme can override them in one place.
+  (with-eval-after-load 'ediff-init
+    (face-spec-set 'smerge-upper
+                   '((t :inherit ediff-current-diff-A)))
+    (face-spec-set 'smerge-lower
+                   '((t :inherit ediff-current-diff-B)))
+    (face-spec-set 'smerge-base
+                   '((t :inherit ediff-current-diff-Ancestor)))
+    (face-spec-set 'smerge-markers
+                   '((t :inherit font-lock-warning-face :weight bold)))
+    (face-spec-set 'smerge-refined-removed
+                   '((t :inherit ediff-fine-diff-A)))
+    (face-spec-set 'smerge-refined-added
+                   '((t :inherit ediff-fine-diff-B))))
+
+  ;; Populate the SPC g m prefix map.
+  (define-key glz/smerge-map "n" #'smerge-next)
+  (define-key glz/smerge-map "p" #'smerge-prev)
+  (define-key glz/smerge-map "u" #'smerge-keep-upper)
+  (define-key glz/smerge-map "l" #'smerge-keep-lower)
+  (define-key glz/smerge-map "b" #'smerge-keep-base)
+  (define-key glz/smerge-map "a" #'smerge-keep-all)
+  (define-key glz/smerge-map "r" #'smerge-resolve)
+  (define-key glz/smerge-map "f" #'smerge-refine)
+  (define-key glz/smerge-map "e" #'smerge-ediff)
+  (define-key glz/smerge-map "t" #'smerge-mode)
+  (with-eval-after-load 'which-key
+    (which-key-add-keymap-based-replacements glz/smerge-map
+      "n" "next conflict"
+      "p" "prev conflict"
+      "u" "keep upper (ours)"
+      "l" "keep lower (theirs)"
+      "b" "keep base"
+      "a" "keep all"
+      "r" "auto-resolve"
+      "f" "refine (word diff)"
+      "e" "open in ediff"
+      "t" "toggle mode"))))
 
 (when glz/enable-forge
   (use-package forge
@@ -727,6 +1071,20 @@
 (when glz/enable-nix
   (use-package nix-mode
     :mode "\\.nix\\'"))
+
+(use-package markdown-mode
+  :mode (("\\.md\\'"       . markdown-mode)
+         ("\\.markdown\\'" . markdown-mode)
+         ("README\\.md\\'" . gfm-mode))
+  :custom
+  (markdown-fontify-code-blocks-natively t)
+  (markdown-command (or (executable-find "pandoc")
+                        (executable-find "multimarkdown")
+                        "markdown")))
+
+(use-package markdown-preview-mode
+  :commands markdown-preview-mode
+  :after markdown-mode)
 
 (when glz/enable-testfall
   (let ((f (expand-file-name "testfall-mode.el" user-emacs-directory)))
@@ -750,15 +1108,47 @@
          (min (point-max) 100000)
          t))))
 
-  (defun glz/maybe-enable-testfall-mode ()
-    "Enable testfall-base-mode when the buffer contains testfall grammar."
-    (when (and buffer-file-name
-               (not (string-match-p "\\.org\\'" buffer-file-name))
-               (not (derived-mode-p 'testfall-base-mode))
+  (defun glz/testfall-apply ()
+    "Apply testfall-base-mode to the current buffer if it contains testfall content.
+Forces full refontification: font-lock-flush clears any stale 'fontified'
+text properties that jit-lock would otherwise skip, then font-lock-ensure
+drives immediate fontification regardless of display state."
+    (when (and (not (derived-mode-p 'testfall-base-mode))
                (glz/testfall-buffer-p))
-      (testfall-base-mode)))
+      (testfall-base-mode)
+      ;; jit-lock marks already-fontified regions with text property
+      ;; 'fontified=t and skips them.  After a mode change the previous
+      ;; mode's fontification is still on the text; flush it so that
+      ;; jit-lock-fontify-now (called by font-lock-ensure) re-applies
+      ;; the new testfall keyword rules over the whole buffer.
+      (font-lock-flush)
+      (font-lock-ensure)))
 
-  (add-hook 'find-file-hook #'glz/maybe-enable-testfall-mode))
+  (defun glz/maybe-enable-testfall-mode ()
+    "Enable testfall-base-mode for file-visiting buffers containing testfall grammar.
+Skipped during ediff (ediff-prepare-buffer-hook handles those buffers)."
+    (when (and (not (bound-and-true-p glz/ediff-in-progress))
+               buffer-file-name
+               (not (string-match-p "\\.org\\'" buffer-file-name)))
+      (glz/testfall-apply)))
+
+  ;; hack-local-variables-hook fires once after the mode and file-local
+  ;; variables are fully settled — on find-file AND after revert-buffer
+  ;; (which magit and auto-revert trigger to refresh a buffer).  Unlike
+  ;; after-change-major-mode-hook it never fires recursively mid-setup,
+  ;; so it cannot wipe font-lock state or cause re-entry loops.
+  (add-hook 'hack-local-variables-hook #'glz/maybe-enable-testfall-mode)
+
+  ;; ediff-prepare-buffer-hook runs inside each buffer as ediff sets it up —
+  ;; including VC revision buffers that have no buffer-file-name.
+  (add-hook 'ediff-prepare-buffer-hook #'glz/testfall-apply)
+
+  ;; magit-find-blob-hook fires after magit sets up a revision/blob buffer
+  ;; (e.g. the ~index~ staged version).  magit calls normal-mode WITHOUT the
+  ;; find-file argument, so hack-local-variables-hook never fires for these
+  ;; buffers.  Append so magit-blob-mode (the default hook entry) runs first.
+  (with-eval-after-load 'magit-files
+    (add-hook 'magit-find-blob-hook #'glz/testfall-apply t)))
 
 (when glz/enable-anforderungen
   (let ((f (expand-file-name "anforderungen-mode.el" user-emacs-directory)))
@@ -809,5 +1199,75 @@
 (setq magit-branch-direct-configure nil)
 ;; don't automatically refresh the status buffer after running a git command
 (setq magit-refresh-status-buffer nil)
+
+(when glz/enable-open-externally
+
+  (defvar glz/external-file-extensions
+    '(;; Microsoft Office
+      "xlsx" "xls" "xlsm" "xlsb"
+      "docx" "doc" "docm"
+      "pptx" "ppt" "pptm"
+      ;; OpenDocument
+      "odt" "ods" "odp" "odg"
+      ;; Images
+      "png" "jpg" "jpeg" "gif" "bmp" "tiff" "tif" "webp" "svg" "ico"
+      ;; Audio / Video
+      "mp3" "wav" "flac" "ogg" "aac"
+      "mp4" "avi" "mkv" "mov" "wmv" "webm"
+      ;; Archives
+      "zip" "rar" "7z" "tar" "gz" "bz2" "xz"
+      ;; Misc binary
+      "exe" "msi" "dmg" "iso")
+    "Extensions delegated to the OS default application instead of Emacs.")
+
+  (defun glz/open-file-with-os-default (file)
+    "Open FILE using the OS default application."
+    (pcase glz/platform
+      ('windows (w32-shell-execute "open" (expand-file-name file)))
+      (_        (call-process "xdg-open" nil 0 nil (expand-file-name file)))))
+
+  (defun glz/maybe-open-externally ()
+    "Hand off the visited file to the OS when its extension is external."
+    (when-let* ((file buffer-file-name)
+                (ext  (file-name-extension file))
+                (_    (member (downcase ext) glz/external-file-extensions)))
+      (glz/open-file-with-os-default file)
+      (let ((buf (current-buffer)))
+        (run-with-idle-timer 0 nil #'kill-buffer buf))))
+
+  (add-hook 'find-file-hook #'glz/maybe-open-externally))
+
+(use-package corfu
+  :custom
+  (corfu-auto        t)
+  (corfu-auto-delay  0.2)
+  (corfu-auto-prefix 2)
+  (corfu-cycle       t)
+  (corfu-quit-no-match 'separator)
+  :hook ((prog-mode   . corfu-mode)
+         (eshell-mode . corfu-mode)))
+
+(when glz/enable-lsp-c
+  ;; ----- Eglot: clangd for C/C++ -----
+  (use-package eglot
+    :ensure nil
+    :preface
+    (defun glz/eglot-c-maybe-start ()
+      "Start eglot for C/C++ only when clangd is available."
+      (when (executable-find "clangd")
+        (eglot-ensure)))
+    :config
+    (add-to-list 'eglot-server-programs
+                 '((c-mode c++-mode c-ts-mode c++-ts-mode)
+                   . ("clangd"
+                      "--background-index"
+                      "--clang-tidy"
+                      "--header-insertion=never"
+                      "--completion-style=detailed"
+                      "--function-arg-placeholders=0")))
+    :hook ((c-mode      . glz/eglot-c-maybe-start)
+           (c++-mode    . glz/eglot-c-maybe-start)
+           (c-ts-mode   . glz/eglot-c-maybe-start)
+           (c++-ts-mode . glz/eglot-c-maybe-start))))
 
 (load custom-file 'noerror 'no-message)
