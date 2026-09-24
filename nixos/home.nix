@@ -39,8 +39,18 @@
     # (pkgs.writeShellScriptBin "my-hello" ''
     #   echo "Hello, ${config.home.username}!"
     # '')
-    ripgrep 
+    ripgrep
     fd
+
+    # Org-mode LaTeX equation preview (org-latex-preview, dvisvgm backend)
+    texlive.combined.scheme-medium
+    dvisvgm
+
+    # pdf-tools build deps (Emacs package itself is installed via elpa/straight
+    # in post-init.el; these are just what its epdfinfo server compiles against)
+    poppler
+    pkg-config
+    gcc
   ];
 
   let 

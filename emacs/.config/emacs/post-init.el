@@ -262,6 +262,17 @@
 
 (define-prefix-command 'glz/org-map)
 (define-key glz/org-map "c" #'org-capture)
+(define-key glz/org-map "a" #'org-agenda)
+(define-key glz/org-map "o" #'org-open-at-point)
+(define-key glz/org-map "l" #'org-insert-link)
+(define-key glz/org-map "t" #'org-todo)
+(define-key glz/org-map "s" #'org-schedule)
+(define-key glz/org-map "d" #'org-deadline)
+(define-key glz/org-map "R" #'org-refile)
+(define-key glz/org-map "p" #'org-priority)
+(define-key glz/org-map "x" #'org-toggle-checkbox)
+(define-key glz/org-map "T" #'org-set-tags-command)
+(define-key glz/org-map "n" #'org-toggle-narrow-to-subtree)
 
 (define-prefix-command 'glz/window-map)
 ;; Navigate
@@ -446,6 +457,15 @@
   (add-to-list 'org-structure-template-alist '("el" . "src emacs-lisp"))
   (add-to-list 'org-structure-template-alist '("py" . "src python"))
 
+  ;; Enable execution of the languages used by the course notes: dot
+  ;; (Graphviz sketches) and latex (equation rendering support code).
+  (org-babel-do-load-languages
+   'org-babel-load-languages
+   '((dot . t)
+     (latex . t)
+     (shell . t)
+     (python . t)))
+
   ;; Replace list hyphen with bullet dot
   (font-lock-add-keywords 'org-mode
                           '(("^ *\\([-]\\) "
@@ -456,7 +476,11 @@
   (org-startup-indented t)
   (org-adapt-indentation nil)
   (org-edit-src-content-indentation 0)
-  (org-startup-truncated t))
+  (org-startup-truncated t)
+  ;; RET on a link follows it instead of just inserting a newline.
+  (org-return-follows-link t)
+  ;; Refuse blind edits on folded text instead of silently corrupting structure.
+  (org-catch-invisible-edits 'show-and-error))
 
 (use-package org-bullets
   :after org
@@ -472,8 +496,22 @@
 (use-package visual-fill-column
   :hook (org-mode . glz/org-mode-visual-fill))
 
+;; Lets file: links with a page number (e.g. file:paper.pdf::12, as used
+;; by the co00/co01/... links in the course notes) open the PDF at that
+;; page, with proper vector rendering, search and annotations.
+(use-package pdf-tools
+  :magic ("%PDF" . pdf-view-mode)
+  :config
+  (pdf-tools-install :no-query))
+
 (setq org-directory glz/org-directory)
 (setq org-agenda-files '("Tasks.org" "Birthdays.org" "Calendar.org"))
+
+;; org-roam only indexes org-directory/roam/, so id: links to/from the
+;; course notes in org-directory/Notes/ (index + chapter files) need
+;; org-id to know about that tree separately, or they fail to resolve.
+(setq org-id-extra-files
+      (directory-files-recursively (concat org-directory "Notes/") "\\.org$"))
 
 (setq org-agenda-start-with-log-mode t)
 (setq org-log-done 'time)
@@ -652,7 +690,13 @@
   (which-key-add-keymap-based-replacements glz/toggle-map
     "l" "line-numbers")
   (which-key-add-keymap-based-replacements glz/org-map
-    "c" "org-capture"))
+    "c" "capture"        "a" "agenda"
+    "o" "open link"      "l" "insert link"
+    "t" "todo state"     "s" "schedule"
+    "d" "deadline"       "R" "refile"
+    "p" "priority"       "x" "toggle checkbox"
+    "T" "tags"           "n" "narrow subtree"
+    "r" "org-roam"))
 
 (use-package helpful
   :commands (helpful-callable

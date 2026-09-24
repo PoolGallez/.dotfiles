@@ -71,6 +71,14 @@
     #  wget
     wireshark
     usbutils
+    kdePackages.kaccounts-integration
+    kdePackages.kaccounts-providers
+    kdePackages.signond
+    kdePackages.accounts-qt # or libsForQt5 if you are on Plasma 5
+    kdePackages.qtwebengine # required backend for the Nextcloud login webview in the accounts wizard
+    nextcloud-client # syncs a local folder + shows up as a Dolphin Places entry
+    claude-code
+    wireguard-tools
   ];
 
   virtualisation.libvirtd = {
