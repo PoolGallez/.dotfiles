@@ -554,12 +554,19 @@
 
   ;; Register "subtree" as a Meow thing so `. s` selects the current subtree
   ;; and `[ s` / `] s` jump to its beginning/end.
+  ;; meow-thing-register wants a FUNCTION returning (BEG . END), not a cons
+  ;; of two function symbols — that dotted pair gets misread as a "multi"
+  ;; thing spec and mapcar chokes on it (Wrong type argument: listp).
+  (defun glz/meow-org-subtree-bounds ()
+    "Return the (BEG . END) bounds of the org subtree at point."
+    (save-excursion
+      (org-back-to-heading t)
+      (let ((beg (point)))
+        (org-end-of-subtree t)
+        (cons beg (point)))))
   (meow-thing-register 'subtree
-                       '(org-back-to-heading . meow--org-subtree-end)
-                       '(org-back-to-heading . meow--org-subtree-end))
-  (defun meow--org-subtree-end ()
-    (org-end-of-subtree t)
-    (point))
+                       #'glz/meow-org-subtree-bounds
+                       #'glz/meow-org-subtree-bounds)
   (add-to-list 'meow-char-thing-table '(?s . subtree))
 
   ;; Fixed-pitch faces for code and special elements
