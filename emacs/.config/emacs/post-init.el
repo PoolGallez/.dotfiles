@@ -1069,7 +1069,28 @@ leaving the outer section and heading intact."
       "r" "auto-resolve"
       "f" "refine (word diff)"
       "e" "open in ediff"
-      "t" "toggle mode"))))
+      "t" "toggle mode")
+    ;; smerge-mode's own default "C-c ^" prefix (smerge-basic-map) is
+    ;; separate from glz/smerge-map above and unlabeled by default — Magit
+    ;; and vc both drop you into smerge-mode with only this built-in prefix
+    ;; available, so label it too.
+    (which-key-add-keymap-based-replacements smerge-mode-map
+      "C-c ^" "smerge")
+    (which-key-add-keymap-based-replacements smerge-basic-map
+      "n" "next conflict"
+      "p" "prev conflict"
+      "u" "keep upper (ours)"
+      "o" "keep lower (theirs)"
+      "l" "keep lower (theirs)"
+      "m" "keep upper (ours)"
+      "b" "keep base"
+      "a" "keep all"
+      "r" "auto-resolve"
+      "R" "refine (word diff)"
+      "E" "open in ediff"
+      "C" "combine with next"
+      "RET" "keep current"
+      "=" "diff →"))))
 
 (when glz/enable-forge
   (use-package forge
