@@ -7,13 +7,23 @@
         (t 'linux))
   "Current platform symbol: windows, linux, or android.")
 
-(defvar glz/enable-org-roam        (memq glz/platform '(linux)))
+(defvar glz/enable-org-roam
+  (or (memq glz/platform '(linux))
+      (and (eq glz/platform 'android)
+           (fboundp 'sqlite-available-p)
+           (sqlite-available-p)))
+  "Org Roam's database wants Emacs's built-in SQLite. On Android the
+alternative is a native module that needs a C compiler at runtime, which
+isn't available, so this probes for the built-in support instead of
+assuming the platform has it.")
+(defvar glz/enable-org-roam-ui     (memq glz/platform '(linux)))
 (defvar glz/enable-forge           (memq glz/platform '(linux)))
 (defvar glz/enable-nix             (memq glz/platform '(linux)))
 (defvar glz/enable-testfall        (memq glz/platform '(windows)))
 (defvar glz/enable-anforderungen   (memq glz/platform '(windows)))
 (defvar glz/enable-canape-par      (memq glz/platform '(windows)))
 (defvar glz/enable-lsp-c           (memq glz/platform '(windows linux)))
+(defvar glz/enable-latex-preview   (memq glz/platform '(windows linux)))
 (defvar glz/enable-open-externally (memq glz/platform '(windows linux)))
 (defvar glz/enable-magit           (memq glz/platform '(windows linux)))
 (defvar glz/enable-pdf-tools       (memq glz/platform '(windows linux)))
@@ -38,6 +48,13 @@
   (when (file-directory-p clangd-bin)
     (add-to-list 'exec-path clangd-bin)
     (setenv "PATH" (concat clangd-bin ";" (getenv "PATH")))))
+
+(when (eq glz/platform 'android)
+  (when (fboundp 'modifier-bar-mode)
+    (modifier-bar-mode 1))
+  (when (fboundp 'pixel-scroll-precision-mode)
+    (pixel-scroll-precision-mode 1))
+  (set-face-attribute 'default nil :height 130))
 
 (defun glz/display-startup-time ()
   (message "Emacs loaded in %s with %d garbage collections."
@@ -112,7 +129,12 @@
   :commands (auto-revert-mode global-auto-revert-mode)
   :hook (after-init . global-auto-revert-mode)
   :init
-  (setq auto-revert-interval 3)
+  ;; Android's storage is reached through a FUSE/SAF bridge where file-notify
+  ;; support is unreliable, so global-auto-revert-mode falls back to this
+  ;; poll interval on every buffer; a phone with no other process editing
+  ;; the same files doesn't need 3s freshness and shouldn't wake the CPU
+  ;; that often on battery.
+  (setq auto-revert-interval (if (eq glz/platform 'android) 20 3))
   (setq auto-revert-remote-files nil)
   (setq auto-revert-use-notify t)
   (setq auto-revert-avoid-polling nil))
@@ -348,6 +370,7 @@
 
   (define-prefix-command 'glz/toggle-map)
   (define-key glz/toggle-map "l" #'display-line-numbers-mode)
+  (define-key glz/toggle-map "=" #'text-scale-adjust)
 
   (define-prefix-command 'glz/org-map)
   (define-key glz/org-map "j" #'org-next-visible-heading)
@@ -357,6 +380,7 @@
   (define-key glz/org-map "u" #'outline-up-heading)
   (define-key glz/org-map "g" #'org-goto)
   (define-key glz/org-map "/" #'org-sparse-tree)
+  (define-key glz/org-map "a" #'org-agenda)
   (define-key glz/org-map (kbd "TAB") #'org-cycle)
 
   (define-prefix-command 'glz/window-map)
@@ -384,15 +408,28 @@
   (when glz/enable-testfall
     (define-key glz/toggle-map "t" #'testfall-mode))
 
-  (when glz/enable-org-roam
-    (define-prefix-command 'glz/org-roam-map)
-    (define-key glz/org-roam-map "c" #'org-roam-capture)
-    (define-key glz/org-roam-map "f" #'org-roam-node-find)
-    (define-key glz/org-roam-map "i" #'org-roam-node-insert)
-    (define-key glz/org-roam-map "a" #'org-roam-node-insert-immediate)
-    (define-key glz/org-roam-map "u" #'org-roam-ui-open)
-    (define-key glz/org-roam-map "b" #'org-roam-buffer-toggle)
-    (define-key glz/org-map "r" 'glz/org-roam-map))
+  (if glz/enable-org-roam
+      (progn
+        (define-prefix-command 'glz/org-roam-map)
+        (define-key glz/org-roam-map "c" #'org-roam-capture)
+        (define-key glz/org-roam-map "f" #'org-roam-node-find)
+        (define-key glz/org-roam-map "i" #'org-roam-node-insert)
+        (define-key glz/org-roam-map "a" #'org-roam-node-insert-immediate)
+        (when glz/enable-org-roam-ui
+          (define-key glz/org-roam-map "u" #'org-roam-ui-open))
+        (define-key glz/org-roam-map "b" #'org-roam-buffer-toggle)
+        ;; Journaling: same keys as C-c n j/J, but reachable through the
+        ;; leader without a Ctrl chord — the whole point on a touchscreen.
+        (define-key glz/org-roam-map "j" #'org-roam-dailies-capture-today)
+        (define-key glz/org-roam-map "J" #'org-roam-dailies-goto-today)
+        (define-key glz/org-map "r" 'glz/org-roam-map))
+    ;; No usable SQLite backend for Org Roam's database (e.g. an Android
+    ;; build without built-in sqlite) — fall back to browsing the notes
+    ;; directory directly so "SPC o r" still gets you to your notes.
+    (define-key glz/org-map "r"
+      (lambda ()
+        (interactive)
+        (dired (concat glz/org-directory "roam/")))))
 
   :config
   (setq meow-cheatsheet-layout meow-cheatsheet-layout-qwerty)
@@ -593,6 +630,8 @@
      (latex . t)
      (shell . t)
      (python . t)))
+  
+  (setq org-preview-latex-default-process 'dvisvgm)
 
   ;; Replace list hyphen with bullet dot
   (font-lock-add-keywords 'org-mode
@@ -692,8 +731,25 @@
   :custom
   (org-bullets-bullet-list '("◉" "○" "●" "○" "●" "○" "●")))
 
+(when glz/enable-latex-preview
+  (use-package auctex
+    :ensure t
+    :defer t
+    :custom
+    ;; Precompile the preamble into a .fmt dump instead of asking each time;
+    ;; this is where most of the preview speedup comes from.
+    (preview-auto-cache-preamble t))
+
+  (use-package org-auctex
+    :vc (:url "https://github.com/karthink/org-auctex" :rev :newest)
+    :after (org auctex)
+    :hook (org-mode . org-auctex-mode)))
+
 (defun glz/org-mode-visual-fill ()
-  (setq visual-fill-column-width 150
+  ;; 300 columns assumes a desktop monitor; a phone in portrait can't use
+  ;; anywhere near that, so narrow it there instead of centering three
+  ;; words in an empty page.
+  (setq visual-fill-column-width (if (eq glz/platform 'android) 80 300)
         visual-fill-column-center-text t)
   (visual-fill-column-mode 1))
 
@@ -744,7 +800,7 @@
                          '(:immediate-finish t)))))
       (apply #'org-roam-node-insert args))))
 
-(when glz/enable-org-roam
+(when glz/enable-org-roam-ui
   (use-package org-roam-ui
     :after org-roam
     :config
