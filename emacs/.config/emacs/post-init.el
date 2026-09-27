@@ -25,7 +25,12 @@ assuming the platform has it.")
 (defvar glz/enable-lsp-c           (memq glz/platform '(windows linux)))
 (defvar glz/enable-latex-preview   (memq glz/platform '(windows linux)))
 (defvar glz/enable-open-externally (memq glz/platform '(windows linux)))
-(defvar glz/enable-magit           (memq glz/platform '(windows linux)))
+(defvar glz/enable-magit
+  (or (memq glz/platform '(windows linux))
+      (and (eq glz/platform 'android) (executable-find "git")))
+  "Needs the real git binary, which on Android only exists via the Termux
+PATH bridge (see Pre-Early-Init) once the shared-UID setup is done. Probes
+for it instead of assuming, same pattern as the Org Roam sqlite check.")
 (defvar glz/enable-pdf-tools       (memq glz/platform '(windows linux)))
 
 (defvar glz/org-directory

@@ -29,6 +29,41 @@ them for Android only.  This must run in pre-early-init.el: it sets
 (when (eq system-type 'android)
   (setq minimal-emacs-ui-features '(menu-bar tool-bar context-menu dialogs)))
 #+end_src
+** Termux binaries on PATH
+Lets Emacs shell out to whatever's installed in Termux (git, ripgrep,
+python, ...) from eshell/vterm/compile/etc — Emacs itself can't install
+arbitrary command-line tools on Android, so this is the way to get them.
+
+Android sandboxes every app's data directory from every other app by
+default, so =/data/data/com.termux/files/usr/bin= is normally invisible to
+Emacs even though it exists on the device. Seeing it requires Emacs and
+Termux to be installed with a shared Android =sharedUserId= — a one-time
+step done outside Emacs entirely (re-signing both APKs with the same
+certificate so Android treats them as the same "user"); see
+https://marek-g.github.io/posts/tips_and_tricks/emacs_on_android/ for the
+full apktool/apksigner walkthrough. Without that step this block is a
+harmless no-op (the path just isn't there to add), so it's safe to carry
+even before you've decided whether to do the APK surgery.
+
+Also works around the F-Droid build of Emacs for Android, which ships
+without built-in gnutls — without a TLS backend, package.el and anything
+else needing HTTPS fails outright. Probing =gnutls-available-p= (same
+capability-check approach as the sqlite check for Org Roam) instead of
+assuming means this only kicks in on the builds that actually need it;
+the external =gnutls-cli= it shells out to must itself come from Termux,
+so it only helps once the PATH above is wired up.
+#+begin_src emacs-lisp
+(when (eq system-type 'android)
+  (ignore-errors
+    (let ((termux-bin "/data/data/com.termux/files/usr/bin"))
+      (when (file-directory-p termux-bin)
+        (setenv "PATH" (concat (getenv "PATH") ":" termux-bin))
+        (setq exec-path (append exec-path (list termux-bin))))))
+
+  (unless (gnutls-available-p)
+    (setq tls-program '("gnutls-cli -p %p %h"
+                         "gnutls-cli -p %p %h --protocols ssl3"))))
+#+end_src
 * Post-Early-Init
 :PROPERTIES:
 :header-args:emacs-lisp: :tangle ./post-early-init.el
@@ -67,7 +102,7 @@ Add or remove platform symbols from each list to control what gets installed.
 
 | Module          | Enabled on                                  |
 |-----------------+----------------------------------------------|
-| org-roam        | linux, android (only if built-in sqlite works) |
+| org-roam        | linux, android (only if built-in sqlite works)  |
 | org-roam-ui     | linux                                        |
 | forge           | linux                                        |
 | nix-mode        | linux                                        |
@@ -77,12 +112,17 @@ Add or remove platform symbols from each list to control what gets installed.
 | lsp-c           | windows, linux                               |
 | latex-preview   | windows, linux                               |
 | open-externally | windows, linux                               |
-| magit           | windows, linux                               |
+| magit           | windows, linux, android (only if git is on PATH) |
 | pdf-tools       | windows, linux                               |
 
-Android gets none of the git-workflow tooling (magit/ediff/smerge — not
-realistic to commit from a phone), no clangd LSP, PDF, or LaTeX-preview
-native-compile dependencies, and no OS-shell-out for external files.
+Android gets no clangd LSP, PDF, or LaTeX-preview native-compile
+dependencies, and no OS-shell-out for external files — none of those have a
+realistic path to working on a phone. The git-workflow tooling
+(magit/ediff/smerge) is the one exception: it's off by default, same as
+before, but turns itself on if the Termux =git= binary is actually reachable
+(see Pre-Early-Init → Termux binaries on PATH) — probed with
+=executable-find=, not assumed, since it depends on the Termux
+=sharedUserId= setup having actually been done.
 
 Org Roam is the one exception worth enabling on a phone — reading notes is
 the main Android use case — but its database needs SQLite, and the only
@@ -118,7 +158,12 @@ assuming the platform has it.")
 (defvar glz/enable-lsp-c           (memq glz/platform '(windows linux)))
 (defvar glz/enable-latex-preview   (memq glz/platform '(windows linux)))
 (defvar glz/enable-open-externally (memq glz/platform '(windows linux)))
-(defvar glz/enable-magit           (memq glz/platform '(windows linux)))
+(defvar glz/enable-magit
+  (or (memq glz/platform '(windows linux))
+      (and (eq glz/platform 'android) (executable-find "git")))
+  "Needs the real git binary, which on Android only exists via the Termux
+PATH bridge (see Pre-Early-Init) once the shared-UID setup is done. Probes
+for it instead of assuming, same pattern as the Org Roam sqlite check.")
 (defvar glz/enable-pdf-tools       (memq glz/platform '(windows linux)))
 #+end_src
 
@@ -1206,7 +1251,8 @@ not immediately undone."
   :demand t)
 #+end_src
 *** Magit (git client)
-Skipped on Android via =glz/enable-magit= — not a realistic place to commit from.
+Gated by =glz/enable-magit=: on by default on desktop, and on Android too
+once =git= is reachable via the Termux PATH bridge (see Feature Flags).
 #+begin_src emacs-lisp
 (when glz/enable-magit
 (use-package magit
@@ -1342,8 +1388,8 @@ Keybindings live on =SPC g m= (git → merge):
 | =e= | open current conflict in ediff |
 | =t= | toggle smerge-mode |
 
-Skipped on Android via =glz/enable-magit= along with magit and ediff — resolving
-Git conflicts from a phone isn't a realistic workflow either.
+Gated by =glz/enable-magit= along with magit and ediff — on Android once
+=git= is reachable via Termux, same as the rest of the git tier.
 #+begin_src emacs-lisp
 (when glz/enable-magit
 (use-package smerge-mode
