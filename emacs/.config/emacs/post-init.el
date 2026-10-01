@@ -741,14 +741,36 @@ for it instead of assuming, same pattern as the Org Roam sqlite check.")
     :ensure t
     :defer t
     :custom
-    ;; Precompile the preamble into a .fmt dump instead of asking each time;
-    ;; this is where most of the preview speedup comes from.
-    (preview-auto-cache-preamble t))
+    ;; Precompiled-preamble caching needs a `mylatex.ltx' this TeX Live
+    ;; install doesn't provide; when it fails it corrupts every later
+    ;; preview's PDF/DVI detection, so leave it off (see prose above).
+    (preview-auto-cache-preamble nil)
+    (preview-image-type 'png))
 
+  
   (use-package org-auctex
     :vc (:url "https://github.com/karthink/org-auctex" :rev :newest)
-    :after (org auctex)
-    :hook (org-mode . org-auctex-mode)))
+    :after org
+    ;; org-mode loads early at startup regardless, so requiring auctex
+    ;; here (rather than gating on an `auctex' feature nothing else ever
+    ;; loads) is what actually makes `org-auctex-mode' turn on in org
+    ;; buffers instead of silently never firing.
+    :init (require 'auctex)
+    :hook (org-mode . org-auctex-mode))
+
+  (with-eval-after-load 'preview
+    (advice-add
+     'preview-get-dpi :around
+     (lambda (orig-fn)
+       (let* ((attrs (frame-monitor-attributes))
+              (mm (cdr (assq 'mm-size attrs)))
+              (geom (nthcdr 3 (assq 'geometry attrs)))
+              (pixel-w (nth 0 geom)) (pixel-h (nth 1 geom))
+              (mm-w (nth 0 mm)) (mm-h (nth 1 mm)))
+         (if (and (integerp mm-w) (integerp mm-h) (> mm-w 0) (> mm-h 0)
+                  (> pixel-w pixel-h) (< mm-w mm-h))
+             (cons (/ (* 25.4 pixel-w) mm-h) (/ (* 25.4 pixel-h) mm-w))
+           (funcall orig-fn)))))))
 
 (defun glz/org-mode-visual-fill ()
   ;; 300 columns assumes a desktop monitor; a phone in portrait can't use

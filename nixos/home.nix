@@ -51,6 +51,11 @@ in
     # texlive's own bin/ directory, so this alone is enough.
     texlive.combined.scheme-medium
 
+    # AUCTeX's preview-latex (preview-mode) shells out to `pdf2dsc` to turn
+    # the compiled PDF into a DSC file it can split into per-preview pages.
+    # pdf2dsc ships with Ghostscript, not texlive.
+    ghostscript
+
     # pdf-tools build deps (Emacs package itself is installed via elpa/straight
     # in post-init.el; these are just what its epdfinfo server compiles against).
     # Only the .dev output (headers/pkg-config) is needed here - the bare
@@ -68,6 +73,7 @@ in
     # `pdftoppm`/`pdftocairo`/`pdfimages`, for cropping a scan of the
     # original handwritten sketch out of a source PDF page
     poppler-utils
+    teams-for-linux
   ];
 
   # Home Manager is pretty good at managing dotfiles. The primary way to manage

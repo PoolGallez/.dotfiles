@@ -969,11 +969,31 @@ features that are unnecessary for a read-only reference document.
 **** AUCTeX-based LaTeX preview (org-auctex)
 Org's built-in LaTeX preview (=dvipng=, synchronous) recompiles the whole
 LaTeX preamble on every preview, which is the main source of slowness on
-notes with many equations. AUCTeX's =preview-latex= avoids that by caching
-a precompiled preamble format dump, so only the fast body pass reruns.
-=org-auctex= wires that engine into Org, replacing the =org-latex-preview=
-binding (=C-c C-x C-l=) with its own async-friendly version while the minor
-mode is on.
+notes with many equations. AUCTeX's =preview-latex= can avoid that by
+caching a precompiled preamble format dump (=preview-auto-cache-preamble=),
+so only the fast body pass reruns — but that dump step shells out to
+=pdflatex -ini= expecting a =mylatex.ltx= file that this system's TeX Live
+package doesn't ship, so the dump always fails; worse, the failed dump
+leaves AUCTeX's internal state inconsistent and causes *every* following
+preview to mis-detect PDF output as DVI and invoke =dvips= on a
+nonexistent =.dvi=, erroring with "End of Preview snippet 1 unexpected".
+Preamble caching is left off until a =mylatex.ltx= is provisioned.
+=org-auctex= wires the AUCTeX preview engine into Org, replacing the
+=org-latex-preview= binding (=C-c C-x C-l=) with its own async-friendly
+version while the minor mode is on.
+
+AUCTeX sizes each preview image from the monitor's reported physical
+size (=frame-monitor-attributes='s =mm-size=), dividing pixel geometry
+by it to get a DPI, so it can render at the resolution the screen
+actually needs instead of a fixed guess. On this laptop's panel, XRandR
+reports that physical size with width and height swapped — =118x189mm=
+for a =2560x1600= *landscape* panel, i.e. portrait-shaped mm for
+landscape pixels — which makes the horizontal and vertical DPI differ
+by a factor of ~2.5 instead of matching, so every preview comes out
+stretched or squashed on one axis (sometimes squashed badly enough to
+look blank). The advice below detects exactly that landscape-pixels/
+portrait-mm mismatch and swaps the mm dimensions back before AUCTeX
+divides by them; it's a no-op for any monitor reporting sane geometry.
 
 AUCTeX native-compiles ~380 elisp files on install and needs a real TeX
 toolchain (=latex=, =dvisvgm=) on =PATH= — neither is realistic on a phone
@@ -985,14 +1005,36 @@ build of Emacs, so this is skipped on Android like the other native-compile
     :ensure t
     :defer t
     :custom
-    ;; Precompile the preamble into a .fmt dump instead of asking each time;
-    ;; this is where most of the preview speedup comes from.
-    (preview-auto-cache-preamble t))
+    ;; Precompiled-preamble caching needs a `mylatex.ltx' this TeX Live
+    ;; install doesn't provide; when it fails it corrupts every later
+    ;; preview's PDF/DVI detection, so leave it off (see prose above).
+    (preview-auto-cache-preamble nil)
+    (preview-image-type 'png))
 
+  
   (use-package org-auctex
     :vc (:url "https://github.com/karthink/org-auctex" :rev :newest)
-    :after (org auctex)
-    :hook (org-mode . org-auctex-mode)))
+    :after org
+    ;; org-mode loads early at startup regardless, so requiring auctex
+    ;; here (rather than gating on an `auctex' feature nothing else ever
+    ;; loads) is what actually makes `org-auctex-mode' turn on in org
+    ;; buffers instead of silently never firing.
+    :init (require 'auctex)
+    :hook (org-mode . org-auctex-mode))
+
+  (with-eval-after-load 'preview
+    (advice-add
+     'preview-get-dpi :around
+     (lambda (orig-fn)
+       (let* ((attrs (frame-monitor-attributes))
+              (mm (cdr (assq 'mm-size attrs)))
+              (geom (nthcdr 3 (assq 'geometry attrs)))
+              (pixel-w (nth 0 geom)) (pixel-h (nth 1 geom))
+              (mm-w (nth 0 mm)) (mm-h (nth 1 mm)))
+         (if (and (integerp mm-w) (integerp mm-h) (> mm-w 0) (> mm-h 0)
+                  (> pixel-w pixel-h) (< mm-w mm-h))
+             (cons (/ (* 25.4 pixel-w) mm-h) (/ (* 25.4 pixel-h) mm-w))
+           (funcall orig-fn)))))))
 #+end_src
 **** Visual fill column (centered, width-limited org buffers)
 #+begin_src emacs-lisp
