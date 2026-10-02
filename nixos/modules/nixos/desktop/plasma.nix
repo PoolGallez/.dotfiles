@@ -1,5 +1,5 @@
 # Configuration for plasma desktop environment
-{ config, pkgs, ... } : 
+{ config, pkgs, ... } :
 
 {
 # Plasma 6
@@ -16,9 +16,13 @@
 	    enable = true;
             Session = "plasma.desktop";
             User = "pool";
-        }; 
+        };
     };
     enableHidpi = true;
   };
+
+  environment.systemPackages = with pkgs; [
+    wl-clipboard # Wayland clipboard CLI, used by the Plasma Wayland session
+  ];
 
 }

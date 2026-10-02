@@ -1,10 +1,10 @@
-{config, lib, pkgs, ... } : 
+{config, lib, pkgs, ... } :
 
 {
   programs.neovim.enable  = true;
 
   programs.neovim.plugins = with pkgs.vimPlugins; [
-     vim-fugitive 
+     vim-fugitive
      nerdtree
      vim-airline
      vim-multiple-cursors
@@ -14,14 +14,14 @@
 
   programs.neovim.defaultEditor = true;
 
-  programs.neovim.extraConfig = 
+  programs.neovim.extraConfig =
      ''
-         " Colorscheme setting 
+         " Colorscheme setting
          colorscheme nord
           "
-          " Personal settings for nvim 
+          " Personal settings for nvim
           "
-          
+
           " Line numbers are both absolute and relative line numbers to easily move
           " within the code
           set number
@@ -29,7 +29,7 @@
 
           " Indentation automatic and based on the type of the file
           set autoindent
-          filetype indent on 
+          filetype indent on
 
           " Highlight the terms you are searching non case sensitive
           set hlsearch

@@ -10,9 +10,12 @@
     [ # Include the results of the hardware scan.
       ../common/common.nix
       ./hardware-configuration.nix
-      ../../de/plasma/plasma.nix
-      ../../apps/gaming/gaming.nix
-      ../../apps/comms/comms.nix
+      ../../modules/nixos/desktop/plasma.nix
+      ../../modules/nixos/gaming.nix
+      ../../modules/nixos/comms.nix
+      ../../modules/nixos/emacs.nix
+      ../../modules/nixos/virtualization.nix
+      ../../modules/nixos/syncthing.nix
     ];
 
   # Bootloader.
@@ -65,9 +68,6 @@
   # List packages installed in system profile. To search, run:
   # $ nix search wget
   environment.systemPackages = with pkgs; [
-    neovim # Do not forget to add an editor to edit configuration.nix! The Nano editor is also installed by default.
-    git
-    openssh
     #  wget
     wireshark
     usbutils

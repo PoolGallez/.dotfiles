@@ -1,1 +1,0 @@
-../../../doom-emacs/.config/doom/config.el

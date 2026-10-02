@@ -9,9 +9,10 @@
     [ # Include the results of the hardware scan.
       ../common/common.nix
       ./hardware-configuration.nix
-      ../../de/plasma/plasma.nix
-      ../../apps/gaming/gaming.nix
-      ../../apps/comms/comms.nix
+      ../../modules/nixos/desktop/plasma.nix
+      ../../modules/nixos/gaming.nix
+      ../../modules/nixos/comms.nix
+      ../../modules/nixos/emacs.nix
     ];
 
   # Bootloader.
@@ -49,7 +50,6 @@
     extraGroups = [ "networkmanager" "wheel" ];
     packages = with pkgs; [
       kdePackages.kate
-      emacs
     ];
   };
 
