@@ -38,7 +38,7 @@ for it instead of assuming, same pattern as the Org Roam sqlite check.")
   (pcase glz/platform
     ('windows "~/PKDB/")
     ('linux   "~/PKDB/")
-    ('android "/content/storage/com.android.externalstorage.documents/primary:PKDB/")) ;; from android to have normal syncthin, please run android request ... access, then create a folder under the root of the device called PKDB, the path should be then the following and should work
+    ('android "/data/data/com.termux/files/home/PKDB/")) ;; from android to have normal syncthin, please run android request ... access, then create a folder under the root of the device called PKDB, the path should be then the following and should work
   "Root directory for all org files.")
 
 (defvar glz/org-notes-directory (concat glz/org-directory "Notes/")
