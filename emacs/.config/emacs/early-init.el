@@ -490,8 +490,3 @@ this stage of initialization."
 ;; End:
 
 ;;; early-init.el ends here
-;; Added additionally the early init part for Emacs on android to recognise the termux binaries
-(when (eq glz/platform 'windows)
-  (setenv "PATH" (format "%s:%s" "/data/data/com.termux/files/usr/bin"
-                         (getenv "PATH")))
-  (push "/data/data/com.termux/files/usr/bin" exec-path))
