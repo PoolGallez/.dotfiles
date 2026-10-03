@@ -1079,15 +1079,21 @@ In every other state KEY keeps its current `org-mode-map' binding."
 
 (add-hook 'org-capture-after-finalize-hook #'glz/popup-frame-close)
 
+(defun glz/main-frame ()
+  "Return the main graphical Emacs frame, ignoring popup frames."
+  (seq-find (lambda (frame)
+              (and (display-graphic-p frame)
+                   (not (frame-parameter frame 'glz-popup))))
+            (frame-list)))
+
 (defun glz/focus-main-frame ()
-  "Raise and focus the main Emacs frame, creating one if needed.
-Popup frames are skipped, so the Emacs shortcut never reuses them."
-  (select-frame-set-input-focus
-   (or (seq-find (lambda (frame)
-                   (and (display-graphic-p frame)
-                        (not (frame-parameter frame 'glz-popup))))
-                 (frame-list))
-       (make-frame))))
+  "Raise and focus the main Emacs frame; return nil if there is none.
+Frame creation is left to the emacsclient caller (-c), because
+`make-frame' inside the daemon has no display and fails with
+\"Unknown terminal type\"."
+  (when-let* ((frame (glz/main-frame)))
+    (select-frame-set-input-focus frame)
+    t))
 
 (use-package dired
   :ensure nil

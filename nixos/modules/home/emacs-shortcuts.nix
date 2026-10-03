@@ -25,8 +25,21 @@
 # programs.plasma.enable only writes the keys declared here; without
 # overrideConfig (not used) it never touches unrelated Plasma settings
 # (panels, widgets, theme).
-{ ... }:
+{ pkgs, ... }:
 
+let
+  # Focus the main frame, or create one from the client side when none
+  # exists: make-frame inside the daemon has no display and fails with
+  # "Unknown terminal type", leaving a failed app-emacs@ systemd unit
+  # that makes home-manager's reloadSystemd report a degraded session.
+  emacsFocus = pkgs.writeShellScript "emacs-focus" ''
+    out=$(emacsclient -a "" -n -e '(if (glz/focus-main-frame) "focused" "none")')
+    case "$out" in
+      *focused*) ;;
+      *) exec emacsclient -n -c ;;
+    esac
+  '';
+in
 {
   programs.plasma.enable = true;
 
@@ -34,8 +47,8 @@
     emacs-focus = {
       name = "Emacs Focus";
       comment = "Open or focus the Emacs window";
-      key = "Meta+E";
-      command = ''emacsclient -n -u -e "(glz/focus-main-frame)"'';
+      key = "Meta+Shift+E";
+      command = "${emacsFocus}";
     };
     emacs-capture = {
       name = "Emacs Capture";
@@ -55,7 +68,7 @@
     emacs = {
       name = "Emacs";
       comment = "Open or focus the Emacs window";
-      exec = ''emacsclient -n -u -e "(glz/focus-main-frame)"'';
+      exec = "${emacsFocus}";
       icon = "emacs";
       terminal = false;
       categories = [ "Development" "TextEditor" ];
