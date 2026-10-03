@@ -230,11 +230,11 @@ the external =gnutls-cli= it shells out to must itself come from Termux,
 so it only helps once the PATH above is wired up.
 #+begin_src emacs-lisp
 (when (eq system-type 'android)
-  (ignore-errors
-    (let ((termux-bin "/data/data/com.termux/files/usr/bin"))
-      (when (file-directory-p termux-bin)
-        (setenv "PATH" (concat (getenv "PATH") ":" termux-bin))
-        (setq exec-path (append exec-path (list termux-bin))))))
+  ;; No file-directory-p guard: it returned nil this early on the phone even
+  ;; though the directory is usable, which silently skipped the PATH setup.
+  (let ((termux-bin "/data/data/com.termux/files/usr/bin"))
+    (setenv "PATH" (concat termux-bin ":" (getenv "PATH")))
+    (push termux-bin exec-path))
 
   (unless (gnutls-available-p)
     (setq tls-program '("gnutls-cli -p %p %h"
@@ -367,7 +367,7 @@ their content comes from the sync tool.
   (pcase glz/platform
     ('windows "~/PKDB/")
     ('linux   "~/PKDB/")
-    ('android "/content/storage/com.android.externalstorage.documents/primary:PKDB")) ;; from android to have normal syncthin, please run android request ... access, then create a folder under the root of the device called PKDB, the path should be then the following and should work
+    ('android "/content/storage/com.android.externalstorage.documents/primary:PKDB/")) ;; from android to have normal syncthin, please run android request ... access, then create a folder under the root of the device called PKDB, the path should be then the following and should work
   "Root directory for all org files.")
 
 (defvar glz/org-notes-directory (concat glz/org-directory "Notes/")
@@ -400,7 +400,11 @@ their content comes from the sync tool.
       (unless (file-exists-p path)
         (with-temp-file path (insert (cdr file)))))))
 
-(glz/org-ensure-structure)
+;; On Android the directory is a document-provider path that only works once
+;; access was granted, so a failure here must not abort startup.
+(condition-case err
+    (glz/org-ensure-structure)
+  (error (message "PKDB setup failed (%s): %S" glz/org-directory err)))
 
 ;; On Windows, Emacs GUI does not inherit the system PATH.
 ;; Add Git's unix tools so diff, grep, find, etc. are available to all packages.

@@ -38,7 +38,7 @@ for it instead of assuming, same pattern as the Org Roam sqlite check.")
   (pcase glz/platform
     ('windows "~/PKDB/")
     ('linux   "~/PKDB/")
-    ('android "/content/storage/com.android.externalstorage.documents/primary:PKDB")) ;; from android to have normal syncthin, please run android request ... access, then create a folder under the root of the device called PKDB, the path should be then the following and should work
+    ('android "/content/storage/com.android.externalstorage.documents/primary:PKDB/")) ;; from android to have normal syncthin, please run android request ... access, then create a folder under the root of the device called PKDB, the path should be then the following and should work
   "Root directory for all org files.")
 
 (defvar glz/org-notes-directory (concat glz/org-directory "Notes/")
@@ -71,7 +71,11 @@ for it instead of assuming, same pattern as the Org Roam sqlite check.")
       (unless (file-exists-p path)
         (with-temp-file path (insert (cdr file)))))))
 
-(glz/org-ensure-structure)
+;; On Android the directory is a document-provider path that only works once
+;; access was granted, so a failure here must not abort startup.
+(condition-case err
+    (glz/org-ensure-structure)
+  (error (message "PKDB setup failed (%s): %S" glz/org-directory err)))
 
 ;; On Windows, Emacs GUI does not inherit the system PATH.
 ;; Add Git's unix tools so diff, grep, find, etc. are available to all packages.

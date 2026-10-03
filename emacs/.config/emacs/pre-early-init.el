@@ -6,11 +6,11 @@
   (setq minimal-emacs-ui-features '(menu-bar tool-bar context-menu dialogs)))
 
 (when (eq system-type 'android)
-  (ignore-errors
-    (let ((termux-bin "/data/data/com.termux/files/usr/bin"))
-      (when (file-directory-p termux-bin)
-        (setenv "PATH" (concat (getenv "PATH") ":" termux-bin))
-        (setq exec-path (append exec-path (list termux-bin))))))
+  ;; No file-directory-p guard: it returned nil this early on the phone even
+  ;; though the directory is usable, which silently skipped the PATH setup.
+  (let ((termux-bin "/data/data/com.termux/files/usr/bin"))
+    (setenv "PATH" (concat termux-bin ":" (getenv "PATH")))
+    (push termux-bin exec-path))
 
   (unless (gnutls-available-p)
     (setq tls-program '("gnutls-cli -p %p %h"
