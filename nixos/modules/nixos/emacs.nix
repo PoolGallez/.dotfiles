@@ -1,6 +1,7 @@
-# The Emacs daemon (services.emacs) and native-compilation/build
-# dependencies for the personal config at emacs/.config/emacs (a
-# minimal-emacs.d based setup — see that directory's Config.org).
+# Native-compilation/build dependencies for the personal config at
+# emacs/.config/emacs (a minimal-emacs.d based setup — see that
+# directory's Config.org). The daemon itself is a home-manager user
+# service, see modules/home/emacs-shortcuts.nix.
 #
 # Not Doom-specific, despite this module's previous name/location
 # (apps/doom-emacs/doom.nix): Doom Emacs itself was abandoned (git history,
@@ -17,7 +18,4 @@
     imagemagick         # for image-dired
     emacs-all-the-icons-fonts
   ];
-
-  services.emacs.package = pkgs.emacs-unstable;
-  services.emacs.enable = true;
 }

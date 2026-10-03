@@ -7,9 +7,9 @@
 # double quotes, with an embedded literal quote escaped as \"), no
 # separate binary needed.
 #
-# The daemon itself ("Emacs Daemon.lnk") is not duplicated here — it's
-# already covered at the system level by services.emacs.enable in
-# modules/nixos/emacs.nix, imported on every desktop host directly.
+# The daemon itself ("Emacs Daemon.lnk") is the services.emacs block below:
+# a user service started with the graphical session, so emacsclient -c
+# always finds a display (at default.target it would have none).
 #
 # Two independent, non-overlapping invocation paths for the same three
 # commands:
@@ -25,42 +25,60 @@
 # programs.plasma.enable only writes the keys declared here; without
 # overrideConfig (not used) it never touches unrelated Plasma settings
 # (panels, widgets, theme).
-{ pkgs, ... }:
+{ pkgs, inputs, ... }:
 
 let
   # Focus the main frame, or create one from the client side when none
   # exists: make-frame inside the daemon has no display and fails with
   # "Unknown terminal type", leaving a failed app-emacs@ systemd unit
   # that makes home-manager's reloadSystemd report a degraded session.
+  # Wayland won't let a background emacsclient raise a window (no
+  # activation token), so after the elisp focus kdotool asks KWin to
+  # activate it.
   emacsFocus = pkgs.writeShellScript "emacs-focus" ''
     out=$(emacsclient -a "" -n -e '(if (glz/focus-main-frame) "focused" "none")')
     case "$out" in
-      *focused*) ;;
+      *focused*) ${pkgs.kdotool}/bin/kdotool search --limit 1 --class emacs windowactivate ;;
       *) exec emacsclient -n -c ;;
     esac
   '';
+
+  # Quoted elisp lives in scripts: a literal \" in a desktop Exec= line is
+  # an invalid escape for KConfig and made KWin log parse errors.
+  emacsCapture = pkgs.writeShellScript "emacs-capture" ''
+    exec emacsclient -a "" -n -u -c -F '((glz-popup . t) (width . 100) (height . 25))' -e '(run-at-time 0 nil (quote org-capture))'
+  '';
+  emacsAgenda = pkgs.writeShellScript "emacs-agenda" ''
+    exec emacsclient -a "" -n -u -c -F '((glz-popup . t))' -e '(run-at-time 0 nil (quote org-agenda) nil "d")'
+  '';
 in
 {
+  services.emacs = {
+    enable = true;
+    package = (pkgs.extend inputs.emacs-overlay.overlays.default).emacs-unstable;
+    startWithUserSession = "graphical";
+  };
+
   programs.plasma.enable = true;
 
   programs.plasma.hotkeys.commands = {
     emacs-focus = {
       name = "Emacs Focus";
       comment = "Open or focus the Emacs window";
-      key = "Meta+Shift+E";
+      key = "Meta+F";
       command = "${emacsFocus}";
     };
     emacs-capture = {
       name = "Emacs Capture";
       comment = "Org capture popup";
-      key = "Meta+Shift+C";
-      command = ''emacsclient -n -u -c -F "((glz-popup . t) (width . 100) (height . 25))" -e "(run-at-time 0 nil (quote org-capture))"'';
+      key = "Meta+C";
+      command = "${emacsCapture}";
     };
     emacs-agenda = {
       name = "Emacs Agenda";
       comment = "Org agenda dashboard popup";
-      key = "Meta+Shift+A";
-      command = ''emacsclient -n -u -c -F "((glz-popup . t))" -e "(run-at-time 0 nil (quote org-agenda) nil \"d\")"'';
+      key = "Meta+O";
+      command = "${emacsAgenda}";
     };
   };
 
@@ -76,7 +94,7 @@ in
     emacs-capture = {
       name = "Emacs Capture";
       comment = "Org capture popup";
-      exec = ''emacsclient -n -u -c -F "((glz-popup . t) (width . 100) (height . 25))" -e "(run-at-time 0 nil (quote org-capture))"'';
+      exec = "${emacsCapture}";
       icon = "emacs";
       terminal = false;
       categories = [ "Development" "Office" ];
@@ -84,7 +102,7 @@ in
     emacs-agenda = {
       name = "Emacs Agenda";
       comment = "Org agenda dashboard popup";
-      exec = ''emacsclient -n -u -c -F "((glz-popup . t))" -e "(run-at-time 0 nil (quote org-agenda) nil \"d\")"'';
+      exec = "${emacsAgenda}";
       icon = "emacs";
       terminal = false;
       categories = [ "Development" "Office" ];
