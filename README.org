@@ -73,3 +73,97 @@ This software is also smart since it is not copying / moving the files at that d
 #+begin_src bash
 stow {"folder of this repo"}
 #+end_src
+
+** NixOS configuration
+Documentation of =nixos/=, the flake that defines the three machines and the
+user environment.  The Emacs side of these machines is documented in
+=emacs/.config/emacs/Config.org=.
+*** Layout
+#+begin_example
+nixos/
+├── flake.nix                  inputs and the outputs: hosts + home-manager config
+├── home.nix                   home-manager config of user "pool" (imports modules/home)
+├── hosts/
+│   ├── common/common.nix      imported by every desktop host (locale, network, audio, nix)
+│   ├── getriebe/              portable machine (LUKS, rotation sensor, virtualization)
+│   ├── triskelion/            second desktop machine (LUKS)
+│   └── rocky/                 aarch64 home server (Rock Pro64)
+├── modules/
+│   ├── nixos/                 system-level modules for desktop hosts
+│   │   ├── common/            locale, networking, audio, nix (flakes, GC, overlays)
+│   │   ├── desktop/plasma.nix Plasma 6 + SDDM (Wayland, autologin)
+│   │   ├── emacs.nix          emacs package and native-compilation deps
+│   │   ├── syncthing.nix      Syncthing service (getriebe)
+│   │   ├── comms.nix          chat apps; gaming.nix; virtualization.nix
+│   └── home/                  user-level modules (home-manager)
+│       ├── emacs-shortcuts.nix  Emacs daemon, hotkeys and menu entries
+│       ├── org-toolchain.nix    LaTeX/PDF dependencies for org
+│       ├── cli-tools.nix, neovim.nix
+├── apps/server/               rocky only: services and system modules
+│   ├── system/                base, networking, users, sops
+│   └── services/              nextcloud, immich, pihole, calibre, wireguard, nginx, duckdns
+└── secrets/                   sops-encrypted secrets, one folder per host + shared
+#+end_example
+*** Hosts
+| Host       | Arch    | Role             | Specifics                                                                                               |
+|------------+---------+------------------+---------------------------------------------------------------------------------------------------------|
+| getriebe   | x86_64  | portable machine | LUKS, Bluetooth, libvirt/virt-manager, Wireshark, Syncthing, binfmt aarch64 (to build and update rocky) |
+| triskelion | x86_64  | desktop machine  | LUKS, nix-ld for unpackaged binaries                                                                    |
+| rocky      | aarch64 | home server      | Nextcloud, Pi-hole, Immich, Calibre, WireGuard, nginx, DuckDNS; secrets with sops-nix                   |
+
+The desktop hosts share Plasma 6, Steam (gaming.nix) and the chat apps.
+Nixpkgs is =nixos-unstable=; unfree packages are allowed; the Nix store is
+garbage collected weekly (generations older than 15 days).
+*** Two layers: system and home-manager
+- *System* (=nixos-rebuild=): hardware, boot, desktop environment, services
+  that need root, and packages for all users.
+- *Home* (=home-manager=): everything about the user environment.  The
+  =pool= configuration is a /standalone/ flake output
+  (=homeConfigurations.pool=), not tied to a host: the same config is applied
+  on getriebe and triskelion.  It carries the Emacs daemon and shortcuts, the
+  org toolchain, CLI tools and Neovim.
+*** Emacs on NixOS
+- The =emacs= package (=emacs-unstable= from the emacs-overlay) and the
+  native-compilation dependencies are installed by =modules/nixos/emacs.nix=.
+- The daemon is a home-manager user service (=services.emacs= in
+  =emacs-shortcuts.nix=) started /with the graphical session/.  Started at
+  login, before the display exists, it can't open graphical frames and
+  =emacsclient -c= fails with "could not get terminal name".
+- Frame creation is done by the client (=emacsclient -c=), never by the
+  daemon: =make-frame= in the daemon has no display and fails with "Unknown
+  terminal type".  The focus script therefore tries =glz/focus-main-frame=
+  first and, if there is no frame, falls back to =emacsclient -c=; on Wayland
+  it then asks KWin to activate the window through =kdotool=.
+- Hotkeys and desktop-menu entries are defined once (as scripts in the Nix
+  store) and used for both: global shortcuts via plasma-manager and
+  =xdg.desktopEntries=.  Quoted elisp is kept inside the scripts because a
+  literal =\"= in a desktop =Exec== line is an invalid escape for KConfig.
+- Plasma stores shortcuts in =~/.config/kglobalshortcutsrc= and holds them in
+  memory inside KWin.  If a shortcut doesn't react after a switch, check
+  =busctl --user call org.kde.kglobalaccel /kglobalaccel org.kde.KGlobalAccel
+  getGlobalShortcutsByKey i <keycode>= and for conflicts with a default
+  (Dolphin owns =Meta+E=, plasmashell =Meta+Shift+A=).
+*** Secrets
+Server secrets use =sops-nix= with age keys: a personal admin key plus the
+host's own key (derived from its SSH host key).  Files are encrypted under
+=secrets/<host>/= and decrypted at activation time; =secrets/shared/= holds
+what several hosts need.  The setup steps are written in
+=apps/server/system/sops.nix=.
+*** Everyday commands
+Run from =~/.dotfiles/nixos=.
+
+| Task                     | Command                                                        |
+|--------------------------+----------------------------------------------------------------|
+| Apply system config      | sudo nixos-rebuild switch --flake .#getriebe (or .#triskelion) |
+| Apply user config        | home-manager switch --flake .#pool                             |
+| Test without switching   | nixos-rebuild build --flake .#getriebe                         |
+| Update inputs            | nix flake update                                               |
+| Check a failed user unit | systemctl --user --failed then journalctl --user -u <unit>     |
+| Clear failed user units  | systemctl --user reset-failed                                  |
+
+Two gotchas worth remembering: flakes only see files known to git, so a
+new =.nix= file needs =git add= (even =git add -N=) before the build can find
+it; and a user unit left in /failed/ state makes =home-manager switch= print
+"The user systemd session is degraded" during =reloadSystemd= (the switch
+itself still continues).
+

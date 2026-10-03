@@ -2,6 +2,182 @@
 #+author: Paolo Galletta
 #+PROPERTY: header-args:emacs-lisp :tangle ./post-init.el
 
+* Guide: what is in here and how to use it
+This first part is documentation only: it contains no source blocks, so
+nothing in it is tangled.  Everything from =* Pre-Early-Init= onwards is the
+actual configuration.
+** How the configuration is organised
+This is a [[https://github.com/jamescherti/minimal-emacs.d][minimal-emacs.d]] based setup.  =Config.org= is the single source of
+truth; saving it tangles (see "Auto-tangle on save") the generated files that
+Emacs really loads:
+
+| File               | Generated from section | Loaded                                  |
+|--------------------+------------------------+-----------------------------------------|
+| pre-early-init.el  | Pre-Early-Init         | before the UI is set up                 |
+| post-early-init.el | Post-Early-Init        | after early-init, package archives      |
+| post-init.el       | Post-Init              | after init: all packages, keys          |
+| sprint.el          | (hand-written)         | by the "Sprint training system" section |
+
+Never edit the generated =.el= files by hand: they are overwritten on the
+next save of =Config.org=.  The directory lives in the dotfiles repo
+(=~/.dotfiles/emacs/.config/emacs=) and is symlinked into =~/.config/emacs=
+with GNU Stow, so the same config runs on Linux (NixOS), Windows and Android.
+Open it from anywhere with =SPC c=.
+
+*Control Panel* (Post-Init) is the only place to touch when setting up a new
+machine: the platform is auto-detected, and per-platform feature flags
+(=glz/enable-org-roam=, =glz/enable-magit=, =glz/enable-sprint=, ...) decide
+what gets loaded.  Paths are derived from =glz/org-directory= (=~/PKDB/=).
+** Editing model: Meow
+Modal editing in the "select first, then act" style.  Normal-state keys are
+Meow's defaults tuned for =hjkl=; =SPC= opens the leader (keypad) menu, and
+which-key shows what is available after each prefix.
+
+| Leader  | Map                    | What it holds                                            |
+|---------+------------------------+----------------------------------------------------------|
+| SPC .   | find-file              |                                                          |
+| SPC SPC | project-find-file      |                                                          |
+| SPC o   | org                    | agenda, capture, TODO states, links, clock, roam, sprint |
+| SPC g   | git                    | magit (status, commit, push, blame, ediff, smerge)       |
+| SPC b   | buffers                | prev/next/kill, copy file path/name                      |
+| SPC w   | windows / perspectives | window moves and splits, project workspaces              |
+| SPC f   | frames                 | new/delete/other frame, fullscreen                       |
+| SPC t   | toggles                | line numbers, text scale                                 |
+| SPC p   | project.el             | C-x p prefix                                             |
+| SPC s   | eshell                 |                                                          |
+| SPC c   | open this file         | Config.org                                               |
+| SPC ?   | cheatsheet             | Meow's key cheatsheet                                    |
+** The PKDB knowledge base
+PKDB ("personal knowledge database") is a plain folder, =~/PKDB=, identical
+on every device.  Emacs creates missing folders and the four core org files
+at startup, and never touches existing ones.
+
+| Path          | Purpose                                                          |
+|---------------+------------------------------------------------------------------|
+| Tasks.org     | all tasks; the only file in the agenda besides the two below     |
+| Calendar.org  | appointments (agenda)                                            |
+| Birthdays.org | birthdays (agenda)                                               |
+| Archive.org   | refile target for finished or cancelled items                    |
+| Notes/        | long structured notes, one folder per course, chapters in files  |
+| roam/         | org-roam Zettelkasten (small linked notes, daily notes)          |
+| Athletics/    | TrainingDB.org (exercise database) and Sprint/ (training system) |
+| Resources/    | lecture PDFs, books, labs: synced, never versioned in git        |
+
+*** Tasks and agenda
+Capture is the entry point: everything goes into =Tasks.org= and is
+organised afterwards.
+- =SPC o c= opens the capture menu: =t= task, =d= task with deadline, =b= birthday.
+- A task records where it was captured (=:ORIGIN:= link to the buffer you
+  were in) and gets project tags, defaulting to the =project.el= project of
+  that buffer, so tasks captured from a repo are filtered by that repo.
+- Keywords: =TODO NEXT DONE= for plain tasks, and =IDEA DISCUSSION ANALYSIS
+  "IN WORK" DONE CANCELLED= for work items.  Closing a task logs the time
+  into the =LOGBOOK= drawer.
+- =SPC o a= opens the agenda.  The custom view =d= (Dashboard) shows the week
+  with deadlines in the next 7 days, all =NEXT= tasks and the active
+  projects; =n= lists only =NEXT=; =e= lists low-effort next tasks (under 15
+  min); =SPC o m= lists the open tasks of one project tag.
+- Finished items are moved with refile (=SPC o w=) to =Archive.org=, or
+  archived (=SPC o A=).  Time can be tracked with the clock map =SPC o C=.
+*** Notes and org-roam
+Course notes live in =Notes/<course>/= as an index plus chapter files.
+=org-roam= (=SPC o r=) handles the Zettelkasten in =roam/=: find or create a
+node, insert a link to a node, toggle the backlinks buffer, daily notes, and
+a graph view in the browser (desktop only).  On a phone, =SPC o r= opens the
+roam folder in Dired when SQLite is unavailable.  Images are pasted or
+dropped into notes with org-download, and equations are previewed with
+AUCTeX's preview-latex (see the LaTeX preview section).
+*** Popup frames and global shortcuts
+Capture and agenda can be opened from outside Emacs as small popup frames
+served by the Emacs daemon (=emacsclient=); the popup closes when the
+capture is finished.  The shortcuts are defined in NixOS, in
+=nixos/modules/home/emacs-shortcuts.nix= (documented in the NixOS section of =README.org=):
+
+| Shortcut | Action                                                   |
+|----------+----------------------------------------------------------|
+| Meta+F   | focus the main Emacs window, creating one if none exists |
+| Meta+C   | org-capture popup                                        |
+| Meta+O   | org-agenda dashboard popup                               |
+** Sprint training system
+A small training-planning engine for a 100 m sprinter, written in
+=sprint.el= and driven by plain org files in =~/PKDB/Athletics/Sprint/=.
+The idea: *one config file is the single source of truth*; the plan, the
+day-by-day schedule and the readiness rules are all derived from it.
+
+| File                     | Role                                                                                                                                    | Who writes it |
+|--------------------------+-----------------------------------------------------------------------------------------------------------------------------------------+---------------|
+| sprint_config_YYYY.org   | every tunable parameter, as #+MACRO lines (season start, competition dates, phase lengths, readiness thresholds, previous-season bests) | you, by hand  |
+| sprint_plan_YYYY.org     | the plan template; reads the config through #+SETUPFILE, weekly tables per phase                                                        | you (rarely)  |
+| sprint_schedule_YYYY.org | the generated calendar: weeks, days, sessions                                                                                           | SPC o S g     |
+| sprint_log_YYYY.org      | what actually happened: sessions, tests, races                                                                                          | org-capture   |
+| ../TrainingDB.org        | exercise database, used by the validator                                                                                                | you           |
+| GAPS.org                 | open issues and design notes of the system                                                                                              | you           |
+
+The season is split into 8 phases (Fundamental I, Fundamental II, indoor
+competition, Transition I, Transformation, outdoor competition,
+championship peak, Transition II); the indoor phases are skipped when
+=INDOOR_SEASON= is =false=.  Weeks are typed LOAD, DELOAD, COMP or TRANSITION; the
+testing battery is scheduled in every deload week.  The current season is the
+highest =sprint_config_YYYY.org= found.
+*** Keys (=SPC o S=)
+| Key | Command                  | What it does                                                       |
+|-----+--------------------------+--------------------------------------------------------------------|
+| g   | sprint-generate-schedule | build or refresh the schedule from config and plan                 |
+| v   | sprint-validate          | check undefined macros, weights summing to 100, dates, exercise DB |
+| i   | sprint-today-info        | phase, week and planned session for today                          |
+| a   | sprint-agenda            | agenda restricted to the sprint schedule                           |
+| s   | capture: session         | log a training session                                             |
+| t   | capture: test            | log the testing battery                                            |
+| r   | capture: race            | log a race result                                                  |
+| y   | sprint-season-summary    | best values of the season as PREV_* macro lines                    |
+| n   | sprint-new-season        | create next year's config, plan and log                            |
+| e   | sprint-export            | export plan, schedule and log to HTML and Markdown                 |
+*** Workflow
+1. *Set up the season.*  Edit =sprint_config_YYYY.org= (season start must be a
+   Monday, competition dates, targets).  Run =SPC o S v= and fix what the
+   validator reports, then =SPC o S g= to generate the schedule.
+2. *Every day.*  =SPC o S i= tells you the phase and the planned session;
+   =SPC o S a= shows the sprint agenda.  After training, =SPC o S s= logs the
+   session: CMJ height, session RPE, soreness and duration are prompted, and
+   the planned session is inserted for reference.  Mark the schedule entry
+   =DONE= or =SKIPPED=.
+3. *Readiness is computed on save of the capture.*  The CMJ is compared to
+   the baseline (percentage, =CMJ_PCT=), combined with the previous session's
+   RPE and the soreness into Green / Yellow / Red with advice (Yellow: drop
+   very high CNS work and cut plyometric contacts by 30%; Red: low-CNS day
+   only).  If the CMJ is below the overreach limit for three sessions in a
+   row, the entry is flagged =OVERREACH= and an unplanned deload week is advised.
+4. *Tests and races.*  =SPC o S t= and =SPC o S r= store results under the
+   =Testing Battery= and =Races= headings of the log.  A race with wind above
+   2.0 m/s is automatically marked =LEGAL: no= and ignored for personal bests.
+5. *Regenerating.*  Running =SPC o S g= again after changing the config keeps
+   all weeks before the current one untouched (so =DONE= / =SKIPPED= survive)
+   and rebuilds the current week onwards.
+6. *End of season.*  =SPC o S y= shows the season's bests (10 m and 30 m
+   times, 100 m PB, CMJ baseline, estimated 1RM from 3RM with Brzycki).
+   =SPC o S n= then creates the next season's files: dates move forward 52
+   weeks and are flagged for review, and the =PREV_*= values come from the
+   log.  Replace the competition dates with the real calendar, validate and
+   generate.
+*** Using it from the phone
+=glz/enable-sprint= is on for Android too: the same captures work on the
+phone, so you can log a session right after training.  Syncthing then
+propagates the log to the other devices (see "Syncing PKDB").
+** Git, projects and the rest
+- *Magit* (=SPC g g=) is the git client; =project.el= is advised so every
+  project gets its own *perspective* (workspace with its own buffers),
+  switched with =SPC w p=.  Forge adds GitHub/GitLab on Linux.
+- *Conflicts*: =SPC g e= for ediff and =SPC g m= for smerge, inline.
+- *Completion*: Vertico, Orderless, Marginalia, Embark, Consult for the
+  minibuffer; Corfu in buffers; eglot + clangd for C/C++.
+- *Platform-specific modes*: Testfall, Anforderungen and CANAPE PAR (work
+  tooling, Windows only), Nix mode (Linux).
+- *Android*: touch-friendly UI (menu bar, modifier bar, larger font) and
+  Termux binaries on the =PATH= (needs the shared-UID setup described in
+  Pre-Early-Init).
+** Syncing PKDB
+PKDB is kept consistent on the devices with Syncthing.
+
 * Pre-Early-Init
 :PROPERTIES:
 :header-args:emacs-lisp: :tangle ./pre-early-init.el
@@ -100,20 +276,21 @@ Platform is auto-detected from =system-type=. Edit the feature flags and paths b
 *** Feature Flags
 Add or remove platform symbols from each list to control what gets installed.
 
-| Module          | Enabled on                                  |
-|-----------------+----------------------------------------------|
-| org-roam        | linux, android (only if built-in sqlite works)  |
-| org-roam-ui     | linux                                        |
-| forge           | linux                                        |
-| nix-mode        | linux                                        |
-| testfall        | windows                                      |
-| anforderungen   | windows                                      |
-| canape-par      | windows                                      |
-| lsp-c           | windows, linux                               |
-| latex-preview   | windows, linux                               |
-| open-externally | windows, linux                               |
+| Module          | Enabled on                                       |
+|-----------------+--------------------------------------------------|
+| org-roam        | linux, android (only if built-in sqlite works)   |
+| org-roam-ui     | linux                                            |
+| forge           | linux                                            |
+| nix-mode        | linux                                            |
+| testfall        | windows                                          |
+| anforderungen   | windows                                          |
+| canape-par      | windows                                          |
+| lsp-c           | windows, linux                                   |
+| latex-preview   | windows, linux                                   |
+| open-externally | windows, linux                                   |
 | magit           | windows, linux, android (only if git is on PATH) |
-| pdf-tools       | windows, linux                               |
+| pdf-tools       | windows, linux                                   |
+| sprint          | windows, linux, android                          |
 
 Android gets no clangd LSP, PDF, or LaTeX-preview native-compile
 dependencies, and no OS-shell-out for external files — none of those have a
@@ -165,22 +342,24 @@ assuming the platform has it.")
 PATH bridge (see Pre-Early-Init) once the shared-UID setup is done. Probes
 for it instead of assuming, same pattern as the Org Roam sqlite check.")
 (defvar glz/enable-pdf-tools       (memq glz/platform '(windows linux)))
+(defvar glz/enable-sprint          (memq glz/platform '(windows linux android)))
 #+end_src
 
 *** Paths
 Personal knowledge base layout (same on every platform, relative to
 =glz/org-directory=):
 
-| Path          | Content                                      |
-|---------------+-----------------------------------------------|
-| Tasks.org     | Tasks (agenda)                                |
-| Calendar.org  | Calendar (agenda)                             |
-| Birthdays.org | Birthdays (agenda)                            |
-| Archive.org   | Refile target for completed/cancelled items   |
-| Notes/        | Long, structured notes                        |
-| roam/         | Org-roam Zettelkasten                         |
+| Path              | Content                                                                 |
+|-------------------+-------------------------------------------------------------------------|
+| Tasks.org         | Tasks (agenda)                                                          |
+| Calendar.org      | Calendar (agenda)                                                       |
+| Birthdays.org     | Birthdays (agenda)                                                      |
+| Archive.org       | Refile target for completed/cancelled items                             |
+| Notes/            | Long, structured notes                                                  |
+| roam/             | Org-roam Zettelkasten                                                   |
+| Athletics/Sprint/ | Sprint training system (config, plan, log, schedule; code in sprint.el) |
 
-Missing folders and files are created at startup, so agenda, capture and
+Missing folders and files are created at startup (the sprint folder only when `glz/enable-sprint' is set), so agenda, capture and
 refile never fail on a fresh machine.  Existing files are never touched —
 their content comes from the sync tool.
 #+begin_src emacs-lisp
@@ -188,7 +367,7 @@ their content comes from the sync tool.
   (pcase glz/platform
     ('windows "~/PKDB/")
     ('linux   "~/PKDB/")
-    ('android "~/PKDB/"))
+    ('android "/content/storage/com.android.externalstorage.documents/primary:PKDB")) ;; from android to have normal syncthin, please run android request ... access, then create a folder under the root of the device called PKDB, the path should be then the following and should work
   "Root directory for all org files.")
 
 (defvar glz/org-notes-directory (concat glz/org-directory "Notes/")
@@ -196,6 +375,9 @@ their content comes from the sync tool.
 
 (defvar glz/org-roam-directory (concat glz/org-directory "roam/")
   "Directory for the org-roam Zettelkasten.")
+
+(defvar glz/org-sprint-directory (concat glz/org-directory "Athletics/Sprint/")
+  "Directory of the sprint training system files (used by sprint.el when `glz/enable-sprint' is set).")
 
 (defvar glz/org-files
   '(("Tasks.org"     . "#+title: Tasks\n\n* Tasks\n")
@@ -210,7 +392,8 @@ their content comes from the sync tool.
 
 (defun glz/org-ensure-structure ()
   "Create the PKDB folders and org files if they do not exist yet."
-  (dolist (dir (list glz/org-directory glz/org-notes-directory glz/org-roam-directory))
+  (dolist (dir (append (list glz/org-directory glz/org-notes-directory glz/org-roam-directory)
+                      (when glz/enable-sprint (list glz/org-sprint-directory))))
     (make-directory (expand-file-name dir) t))
   (dolist (file glz/org-files)
     (let ((path (glz/org-file (car file))))
@@ -735,7 +918,14 @@ evil-mc for multiple cursors.
         ;; leader without a Ctrl chord — the whole point on a touchscreen.
         (define-key glz/org-roam-map "j" #'org-roam-dailies-capture-today)
         (define-key glz/org-roam-map "J" #'org-roam-dailies-goto-today)
-        (define-key glz/org-map "r" 'glz/org-roam-map))
+        (define-key glz/org-roam-map "g" #'org-roam-graph)
+        (define-key glz/org-map "r" 'glz/org-roam-map)
+        (with-eval-after-load 'which-key
+          (which-key-add-keymap-based-replacements glz/org-roam-map
+            "c" "capture note"        "f" "find note"
+            "i" "insert link"         "a" "insert link (no capture)"
+            "b" "backlinks buffer"    "u" "graph in browser"    "g" "graph (graphviz)"
+            "j" "daily: capture"      "J" "daily: go to today")))
     ;; No usable SQLite backend for Org Roam's database (e.g. an Android
     ;; build without built-in sqlite) — fall back to browsing the notes
     ;; directory directly so "SPC o r" still gets you to your notes.
@@ -970,6 +1160,7 @@ In every other state KEY keeps its current `org-mode-map' binding."
   (set-face-attribute 'org-special-keyword nil :inherit '(font-lock-comment-face fixed-pitch))
   (set-face-attribute 'org-meta-line nil :inherit '(font-lock-comment-face fixed-pitch))
   (set-face-attribute 'org-checkbox nil :inherit 'fixed-pitch)
+  (set-face-attribute 'org-table nil :inherit 'fixed-pitch)
 
   ;; Org Tempo snippets
   (require 'org-tempo)
@@ -1140,37 +1331,65 @@ In every other state KEY keeps its current `org-mode-map' binding."
 **** Keybindings
 Inside org buffers, in Meow normal state:
 
-| Key           | Action                                                   |
-|---------------+----------------------------------------------------------|
+| Key           | Action                                                      |
+|---------------+-------------------------------------------------------------|
 | =RET=         | open link/timestamp/footnote, toggle checkbox, fold heading |
-| =C-j= / =C-k= | next / previous visible heading                          |
-| =TAB=         | cycle fold (org default)                                 |
-| =M-h= / =M-l= | promote / demote heading or item                         |
-| =M-H= / =M-L= | promote / demote whole subtree                           |
-| =M-j= / =M-k= | move subtree / item / table row down / up                |
+| =C-j= / =C-k= | next / previous visible heading                             |
+| =TAB=         | cycle fold (org default)                                    |
+| =M-h= / =M-l= | promote / demote heading or item                            |
+| =M-H= / =M-L= | promote / demote whole subtree                              |
+| =M-j= / =M-k= | move subtree / item / table row down / up                   |
 
 Leader map on =SPC o= (works everywhere; buffer commands need an org
 buffer).  Several keys mirror org's own =C-c= keys (=.=, =!=, =-=, =*=,
 ='=), and =w= refiles like in the agenda.
 
-| Key     | Action             | Key     | Action                     |
-|---------+--------------------+---------+----------------------------|
-| =a=     | agenda             | =c=     | capture                    |
-| =m=     | project tasks      |         |                            |
-| =t=     | TODO state         | =T=     | tags                       |
-| =p=     | priority           | =P=     | property                   |
-| =s=     | schedule           | =d=     | deadline                   |
-| =.=     | timestamp          | =!=     | inactive timestamp         |
-| =l=     | insert link        | =y=     | store (yank) link          |
-| =o=     | open at point      | =x=     | toggle checkbox            |
-| =h=     | new heading        | =*= / =-= | toggle heading / list item |
-| =w=     | refile             | =A=     | archive subtree            |
-| =n=     | narrow / widen     | =/=     | sparse tree                |
-| =j= =k= | next / prev heading | =J= =K= | next / prev sibling       |
-| =u=     | parent heading     | =g=     | goto heading               |
-| =e=     | export             | ='=     | edit src block             |
-| =b=     | tangle (babel)     | =TAB=   | cycle fold                 |
-| =C=     | clock →            | =r=     | org-roam →                 |
+| Key     | Action              | Key       | Action                     |
+|---------+---------------------+-----------+----------------------------|
+| =a=     | agenda              | =c=       | capture                    |
+| =m=     | project tasks       |           |                            |
+| =t=     | TODO state          | =T=       | tags                       |
+| =p=     | priority            | =P=       | property                   |
+| =s=     | schedule            | =d=       | deadline                   |
+| =.=     | timestamp           | =!=       | inactive timestamp         |
+| =l=     | insert link         | =y=       | store (yank) link          |
+| =o=     | open at point       | =x=       | toggle checkbox            |
+| =h=     | new heading         | =*= / =-= | toggle heading / list item |
+| =w=     | refile              | =A=       | archive subtree            |
+| =n=     | narrow / widen      | =/=       | sparse tree                |
+| =j= =k= | next / prev heading | =J= =K=   | next / prev sibling        |
+| =u=     | parent heading      | =g=       | goto heading               |
+| =e=     | export              | ='=       | edit src block             |
+| =b=     | tangle (babel)      | =TAB=     | cycle fold                 |
+| =C=     | clock →             | =r=       | org-roam →                 |
+| =E=     | execute code →      | =v=       | view / preview →           |
+| =S=     | sprint →            |           |                            |
+
+*Executing code blocks* (=SPC o E=) and *previews* (=SPC o v=) share the
+same three scopes: the thing under the cursor, the current subtree
+(heading and children) and the whole buffer.  Lowercase shows, uppercase
+hides (previews) or clears (results).
+
+| Key         | Action                                       |
+|-------------+----------------------------------------------|
+| SPC o E e   | execute the block at point                   |
+| SPC o E s   | execute every block in the subtree           |
+| SPC o E b   | execute every block in the buffer            |
+| SPC o E k   | clear the result at point                    |
+| SPC o E K   | clear all results in the buffer              |
+| SPC o v i p | images: toggle at point (or current entry)   |
+| SPC o v i s | images: show in subtree                      |
+| SPC o v i b | images: show in buffer                       |
+| SPC o v i S | images: hide in subtree                      |
+| SPC o v i B | images: hide in buffer                       |
+| SPC o v l p | LaTeX: toggle fragment at point (or section) |
+| SPC o v l s | LaTeX: preview the subtree                   |
+| SPC o v l b | LaTeX: preview the buffer                    |
+| SPC o v l c | LaTeX: hide the preview at point             |
+| SPC o v l S | LaTeX: hide previews in the subtree          |
+| SPC o v l B | LaTeX: hide previews in the buffer           |
+
+Executing asks for confirmation for every block (=org-confirm-babel-evaluate=).
 #+begin_src emacs-lisp
 (define-prefix-command 'glz/org-clock-map)
 (define-key glz/org-clock-map "i" #'org-clock-in)
@@ -1213,6 +1432,56 @@ buffer).  Several keys mirror org's own =C-c= keys (=.=, =!=, =-=, =*=,
 (define-key glz/org-map (kbd "TAB") #'org-cycle)
 (define-key glz/org-map "C" 'glz/org-clock-map)
 
+;; ── Execute code blocks (SPC o E) and previews (SPC o v) ──────────────
+;; "At point" acts on the thing under the cursor, "subtree" on the current
+;; heading and its children, "buffer" on the whole (accessible) file.
+(defun glz/org-subtree-bounds ()
+  "Return (BEG . END) of the org subtree at point, children included."
+  (save-excursion
+    (org-back-to-heading t)
+    (cons (point) (progn (org-end-of-subtree t t) (point)))))
+
+(defmacro glz/org-with-subtree (&rest body)
+  "Run BODY with BEG and END bound to the current subtree."
+  `(pcase-let ((`(,beg . ,end) (glz/org-subtree-bounds))) ,@body))
+
+(define-prefix-command 'glz/org-exec-map)
+(define-key glz/org-exec-map "e" #'org-babel-execute-maybe)
+(define-key glz/org-exec-map "s" #'org-babel-execute-subtree)
+(define-key glz/org-exec-map "b" #'org-babel-execute-buffer)
+(define-key glz/org-exec-map "k" #'org-babel-remove-result-one-or-many)
+(define-key glz/org-exec-map "K" (lambda () (interactive) (org-babel-remove-result-one-or-many t)))
+
+(define-prefix-command 'glz/org-view-map)
+(define-prefix-command 'glz/org-view-image-map)
+(define-prefix-command 'glz/org-view-latex-map)
+(define-key glz/org-view-map "i" 'glz/org-view-image-map)
+(define-key glz/org-view-map "l" 'glz/org-view-latex-map)
+
+;; Images (and other link previews): toggle at point, show subtree/buffer,
+;; clear subtree/buffer.
+(define-key glz/org-view-image-map "p" #'org-link-preview)
+(define-key glz/org-view-image-map "s"
+  (lambda () (interactive) (glz/org-with-subtree (org-link-preview-region nil nil beg end))))
+(define-key glz/org-view-image-map "b" (lambda () (interactive) (org-link-preview '(16))))
+(define-key glz/org-view-image-map "S"
+  (lambda () (interactive) (glz/org-with-subtree (org-link-preview-clear beg end))))
+(define-key glz/org-view-image-map "B" (lambda () (interactive) (org-link-preview '(64))))
+
+;; LaTeX fragments (org-auctex): same layout as the images.
+(when glz/enable-latex-preview
+  (define-key glz/org-view-latex-map "p" #'org-auctex-preview-dwim)
+  (define-key glz/org-view-latex-map "s"
+    (lambda () (interactive) (glz/org-with-subtree (org-auctex-preview-region beg end))))
+  (define-key glz/org-view-latex-map "b" #'org-auctex-preview-buffer)
+  (define-key glz/org-view-latex-map "c" #'org-auctex-preview-clearout-at-point)
+  (define-key glz/org-view-latex-map "S"
+    (lambda () (interactive) (glz/org-with-subtree (org-auctex-preview-clearout beg end))))
+  (define-key glz/org-view-latex-map "B" #'org-auctex-preview-clearout-buffer))
+
+(define-key glz/org-map "E" 'glz/org-exec-map)
+(define-key glz/org-map "v" 'glz/org-view-map)
+
 (with-eval-after-load 'which-key
   (which-key-add-keymap-based-replacements glz/org-map
     "a" "agenda"            "c" "capture"
@@ -1232,11 +1501,27 @@ buffer).  Several keys mirror org's own =C-c= keys (=.=, =!=, =-=, =*=,
     "u" "↑ parent"          "g" "goto heading"
     "e" "export"            "'" "edit src block"
     "b" "tangle"            "TAB" "cycle fold"
-    "C" "clock →"           "r" "roam →")
+    "C" "clock →"           "r" "roam →"
+    "S" "sprint →"
+    "E" "execute →"          "v" "view / preview →")
   (which-key-add-keymap-based-replacements glz/org-clock-map
     "i" "clock in"          "o" "clock out"
     "c" "cancel clock"      "g" "goto clocked task"
-    "r" "clock report"))
+    "r" "clock report")
+  (which-key-add-keymap-based-replacements glz/org-exec-map
+    "e" "block at point"      "s" "subtree"
+    "b" "whole buffer"        "k" "clear result at point"
+    "K" "clear all results")
+  (which-key-add-keymap-based-replacements glz/org-view-map
+    "i" "images →"            "l" "latex →")
+  (which-key-add-keymap-based-replacements glz/org-view-image-map
+    "p" "toggle at point"     "s" "show subtree"
+    "b" "show buffer"         "S" "hide subtree"
+    "B" "hide buffer")
+  (which-key-add-keymap-based-replacements glz/org-view-latex-map
+    "p" "toggle at point"     "s" "show subtree"
+    "b" "show buffer"         "c" "hide at point"
+    "S" "hide subtree"        "B" "hide buffer"))
 #+end_src
 **** Sprint training system
 Loads =sprint.el= (this directory, tracked with the dotfiles) which drives the
@@ -1246,13 +1531,14 @@ captures under =SPC o c S= (=Ss= session, =St= test, =Sr= race) and the
 =SPC o S= map: =g= generate schedule, =v= validate, =i= today, =a= agenda,
 =s= / =t= / =r= capture, =y= season summary, =n= new season.  Loaded after
 the keybindings above so the =SPC o S= key can be installed.  A missing file
-is skipped with a warning.  Kept out of compile-angel like the other personal
+is skipped with a warning.  Switched by =glz/enable-sprint= in the Control Panel (all platforms by default, Android included).  Kept out of compile-angel like the other personal
 modes.
 #+begin_src emacs-lisp
-(with-eval-after-load 'org
-  (let ((f (expand-file-name "sprint.el" user-emacs-directory)))
-    (if (file-exists-p f) (load-file f)
-      (message "Warning: %s not found, skipping sprint" f))))
+(when glz/enable-sprint
+  (with-eval-after-load 'org
+    (let ((f (expand-file-name "sprint.el" user-emacs-directory)))
+      (if (file-exists-p f) (load-file f)
+        (message "Warning: %s not found, skipping sprint" f)))))
 #+end_src
 **** AUCTeX-based LaTeX preview (org-auctex)
 Org's built-in LaTeX preview (=dvipng=, synchronous) recompiles the whole
@@ -1399,12 +1685,6 @@ Consolidated into the =use-package org= block above under =**** Basic settings a
                org-roam-capture)
     :custom
     (org-roam-directory (file-truename (concat org-directory "roam/")))
-    :bind (("C-c n l" . org-roam-buffer-toggle)
-           ("C-c n f" . org-roam-node-find)
-           ("C-c n g" . org-roam-graph)
-           ("C-c n i" . org-roam-node-insert)
-           ("C-c n c" . org-roam-capture)
-           ("C-c n j" . org-roam-dailies-capture-today))
     :config
     (setq org-roam-node-display-template
           (concat "${title:*} " (propertize "${tags:10}" 'face 'org-tag)))
@@ -1639,7 +1919,42 @@ not immediately undone."
     "n" "yank file name")
 
   (which-key-add-keymap-based-replacements glz/toggle-map
-    "l" "line-numbers"))
+    "l" "line-numbers")
+
+  ;; Leader entries that Meow forwards to a built-in prefix, plus the
+  ;; prefixes that which-key would otherwise print as "+prefix".
+  (which-key-add-keymap-based-replacements mode-specific-map
+    "p" "project"
+    "h" "help"
+    "s" "eshell"
+    "c" "open Config.org"
+    "^" "outline / sort")
+
+  (which-key-add-key-based-replacements
+    ;; C-x
+    "C-x RET" "coding system"
+    "C-x 4" "other window"
+    "C-x 5" "other frame"
+    "C-x 8" "unicode / compose"
+    "C-x a" "abbrev"
+    "C-x n" "narrow"
+    "C-x p" "project"
+    "C-x r" "registers / rectangles / bookmarks"
+    "C-x t" "tabs"
+    "C-x v" "version control"
+    "C-x w" "window / highlight"
+    "C-x x" "buffer actions"
+    "C-x C-k" "keyboard macros"
+    "C-x p C-x" "project (other)"
+    ;; C-h, M-s
+    "C-h 4" "help (other window)"
+    "M-s h" "highlight")
+
+  (which-key-add-major-mode-key-based-replacements 'org-mode
+    "C-c \"" "plot"
+    "C-c C-v" "babel"
+    "C-c C-x" "org extras (clock, properties, ...)"
+    "C-c ^" "sort"))
 #+end_src
 *** Helpful (better help screens)
 #+begin_src emacs-lisp
@@ -1793,14 +2108,14 @@ exactly as you left it.  =consult-buffer= only lists the current
 perspective's buffers by default; the hidden "all buffers" source is
 still reachable via consult's narrowing keys.
 
-| Key       | Action                                   |
-|-----------+-------------------------------------------|
-| =SPC w p= | open/switch to a project's perspective   |
-| =SPC w P= | switch to any perspective by name        |
-| =SPC w n= | next perspective                         |
-| =SPC w N= | previous perspective                     |
-| =SPC w X= | kill perspective (and its own buffers)   |
-| =C-c M-p= | full =persp-mode= prefix map             |
+| Key       | Action                                 |
+|-----------+----------------------------------------|
+| =SPC w p= | open/switch to a project's perspective |
+| =SPC w P= | switch to any perspective by name      |
+| =SPC w n= | next perspective                       |
+| =SPC w N= | previous perspective                   |
+| =SPC w X= | kill perspective (and its own buffers) |
+| =C-c M-p= | full =persp-mode= prefix map           |
 #+begin_src emacs-lisp
 (use-package perspective
   :demand t
@@ -1847,17 +2162,17 @@ one side or auto-resolve, and fall back to ediff for tricky cases.
 
 Keybindings live on =SPC g m= (git → merge):
 
-| Key | Action |
-|-----+--------|
-| =n= / =p= | next / previous conflict |
-| =u= | keep upper (ours, =<<<<<<<= block) |
-| =l= | keep lower (theirs, =>>>>>>>= block) |
-| =b= | keep base (common ancestor, 3-way only) |
-| =a= | keep all (concatenate both sides) |
-| =r= | auto-resolve (simple cases) |
-| =f= | refine — show word-level diffs |
-| =e= | open current conflict in ediff |
-| =t= | toggle smerge-mode |
+| Key       | Action                                  |
+|-----------+-----------------------------------------|
+| =n= / =p= | next / previous conflict                |
+| =u=       | keep upper (ours, =<<<<<<<= block)      |
+| =l=       | keep lower (theirs, =>>>>>>>= block)    |
+| =b=       | keep base (common ancestor, 3-way only) |
+| =a=       | keep all (concatenate both sides)       |
+| =r=       | auto-resolve (simple cases)             |
+| =f=       | refine — show word-level diffs          |
+| =e=       | open current conflict in ediff          |
+| =t=       | toggle smerge-mode                      |
 
 Gated by =glz/enable-magit= along with magit and ediff — on Android once
 =git= is reachable via Termux, same as the rest of the git tier.

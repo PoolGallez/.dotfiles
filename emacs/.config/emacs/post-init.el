@@ -32,12 +32,13 @@ assuming the platform has it.")
 PATH bridge (see Pre-Early-Init) once the shared-UID setup is done. Probes
 for it instead of assuming, same pattern as the Org Roam sqlite check.")
 (defvar glz/enable-pdf-tools       (memq glz/platform '(windows linux)))
+(defvar glz/enable-sprint          (memq glz/platform '(windows linux android)))
 
 (defvar glz/org-directory
   (pcase glz/platform
     ('windows "~/PKDB/")
     ('linux   "~/PKDB/")
-    ('android "~/PKDB/"))
+    ('android "/content/storage/com.android.externalstorage.documents/primary:PKDB")) ;; from android to have normal syncthin, please run android request ... access, then create a folder under the root of the device called PKDB, the path should be then the following and should work
   "Root directory for all org files.")
 
 (defvar glz/org-notes-directory (concat glz/org-directory "Notes/")
@@ -45,6 +46,9 @@ for it instead of assuming, same pattern as the Org Roam sqlite check.")
 
 (defvar glz/org-roam-directory (concat glz/org-directory "roam/")
   "Directory for the org-roam Zettelkasten.")
+
+(defvar glz/org-sprint-directory (concat glz/org-directory "Athletics/Sprint/")
+  "Directory of the sprint training system files (used by sprint.el when `glz/enable-sprint' is set).")
 
 (defvar glz/org-files
   '(("Tasks.org"     . "#+title: Tasks\n\n* Tasks\n")
@@ -59,7 +63,8 @@ for it instead of assuming, same pattern as the Org Roam sqlite check.")
 
 (defun glz/org-ensure-structure ()
   "Create the PKDB folders and org files if they do not exist yet."
-  (dolist (dir (list glz/org-directory glz/org-notes-directory glz/org-roam-directory))
+  (dolist (dir (append (list glz/org-directory glz/org-notes-directory glz/org-roam-directory)
+                      (when glz/enable-sprint (list glz/org-sprint-directory))))
     (make-directory (expand-file-name dir) t))
   (dolist (file glz/org-files)
     (let ((path (glz/org-file (car file))))
@@ -489,7 +494,14 @@ for it instead of assuming, same pattern as the Org Roam sqlite check.")
         ;; leader without a Ctrl chord — the whole point on a touchscreen.
         (define-key glz/org-roam-map "j" #'org-roam-dailies-capture-today)
         (define-key glz/org-roam-map "J" #'org-roam-dailies-goto-today)
-        (define-key glz/org-map "r" 'glz/org-roam-map))
+        (define-key glz/org-roam-map "g" #'org-roam-graph)
+        (define-key glz/org-map "r" 'glz/org-roam-map)
+        (with-eval-after-load 'which-key
+          (which-key-add-keymap-based-replacements glz/org-roam-map
+            "c" "capture note"        "f" "find note"
+            "i" "insert link"         "a" "insert link (no capture)"
+            "b" "backlinks buffer"    "u" "graph in browser"    "g" "graph (graphviz)"
+            "j" "daily: capture"      "J" "daily: go to today")))
     ;; No usable SQLite backend for Org Roam's database (e.g. an Android
     ;; build without built-in sqlite) — fall back to browsing the notes
     ;; directory directly so "SPC o r" still gets you to your notes.
@@ -713,6 +725,7 @@ In every other state KEY keeps its current `org-mode-map' binding."
   (set-face-attribute 'org-special-keyword nil :inherit '(font-lock-comment-face fixed-pitch))
   (set-face-attribute 'org-meta-line nil :inherit '(font-lock-comment-face fixed-pitch))
   (set-face-attribute 'org-checkbox nil :inherit 'fixed-pitch)
+  (set-face-attribute 'org-table nil :inherit 'fixed-pitch)
 
   ;; Org Tempo snippets
   (require 'org-tempo)
@@ -921,6 +934,56 @@ In every other state KEY keeps its current `org-mode-map' binding."
 (define-key glz/org-map (kbd "TAB") #'org-cycle)
 (define-key glz/org-map "C" 'glz/org-clock-map)
 
+;; ── Execute code blocks (SPC o E) and previews (SPC o v) ──────────────
+;; "At point" acts on the thing under the cursor, "subtree" on the current
+;; heading and its children, "buffer" on the whole (accessible) file.
+(defun glz/org-subtree-bounds ()
+  "Return (BEG . END) of the org subtree at point, children included."
+  (save-excursion
+    (org-back-to-heading t)
+    (cons (point) (progn (org-end-of-subtree t t) (point)))))
+
+(defmacro glz/org-with-subtree (&rest body)
+  "Run BODY with BEG and END bound to the current subtree."
+  `(pcase-let ((`(,beg . ,end) (glz/org-subtree-bounds))) ,@body))
+
+(define-prefix-command 'glz/org-exec-map)
+(define-key glz/org-exec-map "e" #'org-babel-execute-maybe)
+(define-key glz/org-exec-map "s" #'org-babel-execute-subtree)
+(define-key glz/org-exec-map "b" #'org-babel-execute-buffer)
+(define-key glz/org-exec-map "k" #'org-babel-remove-result-one-or-many)
+(define-key glz/org-exec-map "K" (lambda () (interactive) (org-babel-remove-result-one-or-many t)))
+
+(define-prefix-command 'glz/org-view-map)
+(define-prefix-command 'glz/org-view-image-map)
+(define-prefix-command 'glz/org-view-latex-map)
+(define-key glz/org-view-map "i" 'glz/org-view-image-map)
+(define-key glz/org-view-map "l" 'glz/org-view-latex-map)
+
+;; Images (and other link previews): toggle at point, show subtree/buffer,
+;; clear subtree/buffer.
+(define-key glz/org-view-image-map "p" #'org-link-preview)
+(define-key glz/org-view-image-map "s"
+  (lambda () (interactive) (glz/org-with-subtree (org-link-preview-region nil nil beg end))))
+(define-key glz/org-view-image-map "b" (lambda () (interactive) (org-link-preview '(16))))
+(define-key glz/org-view-image-map "S"
+  (lambda () (interactive) (glz/org-with-subtree (org-link-preview-clear beg end))))
+(define-key glz/org-view-image-map "B" (lambda () (interactive) (org-link-preview '(64))))
+
+;; LaTeX fragments (org-auctex): same layout as the images.
+(when glz/enable-latex-preview
+  (define-key glz/org-view-latex-map "p" #'org-auctex-preview-dwim)
+  (define-key glz/org-view-latex-map "s"
+    (lambda () (interactive) (glz/org-with-subtree (org-auctex-preview-region beg end))))
+  (define-key glz/org-view-latex-map "b" #'org-auctex-preview-buffer)
+  (define-key glz/org-view-latex-map "c" #'org-auctex-preview-clearout-at-point)
+  (define-key glz/org-view-latex-map "S"
+    (lambda () (interactive) (glz/org-with-subtree (org-auctex-preview-clearout beg end))))
+  (define-key glz/org-view-latex-map "B" #'org-auctex-preview-clearout-buffer))
+
+(define-key glz/org-map "E" 'glz/org-exec-map)
+(define-key glz/org-map "v" 'glz/org-view-map)
+
 (with-eval-after-load 'which-key
   (which-key-add-keymap-based-replacements glz/org-map
     "a" "agenda"            "c" "capture"
@@ -940,16 +1003,33 @@ In every other state KEY keeps its current `org-mode-map' binding."
     "u" "↑ parent"          "g" "goto heading"
     "e" "export"            "'" "edit src block"
     "b" "tangle"            "TAB" "cycle fold"
-    "C" "clock →"           "r" "roam →")
+    "C" "clock →"           "r" "roam →"
+    "S" "sprint →"
+    "E" "execute →"          "v" "view / preview →")
   (which-key-add-keymap-based-replacements glz/org-clock-map
     "i" "clock in"          "o" "clock out"
     "c" "cancel clock"      "g" "goto clocked task"
-    "r" "clock report"))
+    "r" "clock report")
+  (which-key-add-keymap-based-replacements glz/org-exec-map
+    "e" "block at point"      "s" "subtree"
+    "b" "whole buffer"        "k" "clear result at point"
+    "K" "clear all results")
+  (which-key-add-keymap-based-replacements glz/org-view-map
+    "i" "images →"            "l" "latex →")
+  (which-key-add-keymap-based-replacements glz/org-view-image-map
+    "p" "toggle at point"     "s" "show subtree"
+    "b" "show buffer"         "S" "hide subtree"
+    "B" "hide buffer")
+  (which-key-add-keymap-based-replacements glz/org-view-latex-map
+    "p" "toggle at point"     "s" "show subtree"
+    "b" "show buffer"         "c" "hide at point"
+    "S" "hide subtree"        "B" "hide buffer"))
 
-(with-eval-after-load 'org
-  (let ((f (expand-file-name "sprint.el" user-emacs-directory)))
-    (if (file-exists-p f) (load-file f)
-      (message "Warning: %s not found, skipping sprint" f))))
+(when glz/enable-sprint
+  (with-eval-after-load 'org
+    (let ((f (expand-file-name "sprint.el" user-emacs-directory)))
+      (if (file-exists-p f) (load-file f)
+        (message "Warning: %s not found, skipping sprint" f)))))
 
 (when glz/enable-latex-preview
   (use-package auctex
@@ -1039,12 +1119,6 @@ In every other state KEY keeps its current `org-mode-map' binding."
                org-roam-capture)
     :custom
     (org-roam-directory (file-truename (concat org-directory "roam/")))
-    :bind (("C-c n l" . org-roam-buffer-toggle)
-           ("C-c n f" . org-roam-node-find)
-           ("C-c n g" . org-roam-graph)
-           ("C-c n i" . org-roam-node-insert)
-           ("C-c n c" . org-roam-capture)
-           ("C-c n j" . org-roam-dailies-capture-today))
     :config
     (setq org-roam-node-display-template
           (concat "${title:*} " (propertize "${tags:10}" 'face 'org-tag)))
@@ -1240,7 +1314,42 @@ not immediately undone."
     "n" "yank file name")
 
   (which-key-add-keymap-based-replacements glz/toggle-map
-    "l" "line-numbers"))
+    "l" "line-numbers")
+
+  ;; Leader entries that Meow forwards to a built-in prefix, plus the
+  ;; prefixes that which-key would otherwise print as "+prefix".
+  (which-key-add-keymap-based-replacements mode-specific-map
+    "p" "project"
+    "h" "help"
+    "s" "eshell"
+    "c" "open Config.org"
+    "^" "outline / sort")
+
+  (which-key-add-key-based-replacements
+    ;; C-x
+    "C-x RET" "coding system"
+    "C-x 4" "other window"
+    "C-x 5" "other frame"
+    "C-x 8" "unicode / compose"
+    "C-x a" "abbrev"
+    "C-x n" "narrow"
+    "C-x p" "project"
+    "C-x r" "registers / rectangles / bookmarks"
+    "C-x t" "tabs"
+    "C-x v" "version control"
+    "C-x w" "window / highlight"
+    "C-x x" "buffer actions"
+    "C-x C-k" "keyboard macros"
+    "C-x p C-x" "project (other)"
+    ;; C-h, M-s
+    "C-h 4" "help (other window)"
+    "M-s h" "highlight")
+
+  (which-key-add-major-mode-key-based-replacements 'org-mode
+    "C-c \"" "plot"
+    "C-c C-v" "babel"
+    "C-c C-x" "org extras (clock, properties, ...)"
+    "C-c ^" "sort"))
 
 (use-package helpful
   :commands (helpful-callable

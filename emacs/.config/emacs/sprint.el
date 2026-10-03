@@ -34,8 +34,8 @@
 (defgroup sprint nil "Sprint training system." :group 'org)
 
 (defcustom sprint-directory
-  (expand-file-name "Athletics/Sprint/"
-                    (if (boundp 'glz/org-directory) glz/org-directory "~/PKDB/"))
+  (expand-file-name (if (boundp 'glz/org-sprint-directory) glz/org-sprint-directory
+                      "~/PKDB/Athletics/Sprint/"))
   "Directory holding the sprint config, plan, log and schedule files."
   :type 'directory)
 
@@ -780,7 +780,31 @@ come from the log, and the plan's #+SETUPFILE points to the new config."
     (sprint-file 'config ny)))
 
 (defun sprint--log-skeleton (year)
-  (format "#+TITLE: Sprint Log %d\n#+STARTUP: overview\n#+TODO: TODO | DONE\n\n* Testing Battery\n* Races\n" year))
+  (format "#+TITLE: Sprint Log %d\n#+STARTUP: overview\n#+OPTIONS: prop:t toc:2 author:nil\n#+TODO: TODO | DONE\n\n* Testing Battery\n* Races\n" year))
+
+;;;; Export (for sharing)
+
+;;;###autoload
+(defun sprint-export (&optional year)
+  "Export plan, schedule and log of YEAR to self-contained HTML and Markdown.
+Files go to the export/ folder next to the config.  Macros are resolved,
+so the result can be read without Emacs.  For PDF use C-c C-e l p in the
+plan; for a single phase or week narrow with C-x n s / use C-c C-e C-s."
+  (interactive)
+  (require (quote ox-html)) (require (quote ox-md))
+  (let ((dir (expand-file-name "export/" sprint-directory)) out)
+    (make-directory dir t)
+    (dolist (kind (quote (plan schedule log)))
+      (let ((src (sprint-file kind year)))
+        (when (file-exists-p src)
+          (with-current-buffer (find-file-noselect src)
+            (dolist (ext (quote ("html" "md")))
+              (let ((target (expand-file-name (concat (file-name-base src) "." ext) dir))
+                    (org-export-use-babel nil))
+                (org-export-to-file (if (equal ext "html") (quote html) (quote md)) target)
+                (push target out)))))))
+    (message "Exported: %s" (mapconcat (function file-name-nondirectory) (nreverse out) ", "))
+    dir))
 
 ;;;; Keys
 
@@ -795,11 +819,20 @@ come from the log, and the plan's #+SETUPFILE points to the new config."
     (define-key m "r" (lambda () (interactive) (org-capture nil "Sr")))
     (define-key m "y" #'sprint-season-summary)
     (define-key m "n" #'sprint-new-season)
+    (define-key m "e" #'sprint-export)
     m)
   "Keymap for the sprint commands.")
 
 (when (boundp 'glz/org-map)
   (define-key glz/org-map "S" sprint-map))
+
+(with-eval-after-load 'which-key
+  (which-key-add-keymap-based-replacements sprint-map
+    "g" "generate schedule"   "v" "validate"
+    "i" "today info"          "a" "sprint agenda"
+    "s" "log session"         "t" "log test"
+    "r" "log race"            "y" "season summary"
+    "n" "new season"          "e" "export"))
 
 (provide 'sprint)
 ;;; sprint.el ends here
