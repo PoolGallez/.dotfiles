@@ -351,6 +351,7 @@ This block must come before all other package declarations.
   ;; the native-comp speedup isn't worth the .elc clutter sitting beside
   ;; them in the dotfiles-tracked directory.
   (push "/canape-par-mode.el" compile-angel-excluded-files)
+  (push "/sprint.el" compile-angel-excluded-files)
   (push "/testfall-mode.el" compile-angel-excluded-files)
   (push "/anforderungen-mode.el" compile-angel-excluded-files)
 
@@ -1236,6 +1237,22 @@ buffer).  Several keys mirror org's own =C-c= keys (=.=, =!=, =-=, =*=,
     "i" "clock in"          "o" "clock out"
     "c" "cancel clock"      "g" "goto clocked task"
     "r" "clock report"))
+#+end_src
+**** Sprint training system
+Loads =sprint.el= (this directory, tracked with the dotfiles) which drives the
+sprint training system in the PKDB (=Athletics/Sprint/=: config, plan, schedule
+and log) and adds its capture templates.  It adds the
+captures under =SPC o c S= (=Ss= session, =St= test, =Sr= race) and the
+=SPC o S= map: =g= generate schedule, =v= validate, =i= today, =a= agenda,
+=s= / =t= / =r= capture, =y= season summary, =n= new season.  Loaded after
+the keybindings above so the =SPC o S= key can be installed.  A missing file
+is skipped with a warning.  Kept out of compile-angel like the other personal
+modes.
+#+begin_src emacs-lisp
+(with-eval-after-load 'org
+  (let ((f (expand-file-name "sprint.el" user-emacs-directory)))
+    (if (file-exists-p f) (load-file f)
+      (message "Warning: %s not found, skipping sprint" f))))
 #+end_src
 **** AUCTeX-based LaTeX preview (org-auctex)
 Org's built-in LaTeX preview (=dvipng=, synchronous) recompiles the whole

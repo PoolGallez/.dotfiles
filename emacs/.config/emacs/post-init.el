@@ -147,6 +147,7 @@ for it instead of assuming, same pattern as the Org Roam sqlite check.")
   ;; the native-comp speedup isn't worth the .elc clutter sitting beside
   ;; them in the dotfiles-tracked directory.
   (push "/canape-par-mode.el" compile-angel-excluded-files)
+  (push "/sprint.el" compile-angel-excluded-files)
   (push "/testfall-mode.el" compile-angel-excluded-files)
   (push "/anforderungen-mode.el" compile-angel-excluded-files)
 
@@ -944,6 +945,11 @@ In every other state KEY keeps its current `org-mode-map' binding."
     "i" "clock in"          "o" "clock out"
     "c" "cancel clock"      "g" "goto clocked task"
     "r" "clock report"))
+
+(with-eval-after-load 'org
+  (let ((f (expand-file-name "sprint.el" user-emacs-directory)))
+    (if (file-exists-p f) (load-file f)
+      (message "Warning: %s not found, skipping sprint" f))))
 
 (when glz/enable-latex-preview
   (use-package auctex
