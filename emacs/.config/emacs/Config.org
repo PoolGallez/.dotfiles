@@ -130,6 +130,7 @@ highest =sprint_config_YYYY.org= found.
 | t   | capture: test            | log the testing battery                                            |
 | r   | capture: race            | log a race result                                                  |
 | y   | sprint-season-summary    | best values of the season as PREV_* macro lines                    |
+| l   | sprint-lock-week         | lock/unlock the week at point so regeneration keeps your edits     |
 | n   | sprint-new-season        | create next year's config, plan and log                            |
 | e   | sprint-export            | export plan, schedule and log to HTML and Markdown                 |
 *** Workflow
@@ -159,6 +160,31 @@ highest =sprint_config_YYYY.org= found.
    weeks and are flagged for review, and the =PREV_*= values come from the
    log.  Replace the competition dates with the real calendar, validate and
    generate.
+*** Generated exercises and weekly load
+=SPC o S g= does not only lay out the calendar: it fills every session with a
+starting-point list of exercises, so you adjust instead of writing from scratch.
+- *Categories.* The session text of the weekly templates ("Acceleration +
+  Technical Drills + Strength (Max Force)") is matched against the 20 DB
+  categories (=sprint--category-keywords=).  Warm-Up is added on High days.
+- *Selection.* For each category, exercises are sampled from =TrainingDB.org=,
+  at most =sprint-exercises-per-category= per session, skipping exercises whose
+  CNS demand is too high for a Low day and any =sprint-unavailable-equipment=.
+  An exercise named in the template ("Power Clean") is used as is.
+- *Variation.* Least-used exercises first, then the least recently used, a
+  different SUBCATEGORY inside the same slot, and never the same exercise twice
+  in a week.  The whole season is simulated in order, so reruns give the same
+  result.
+- *Load.* Lifts with config entries (squat, trap bar DL, power clean, Nordic)
+  get sets × reps @ % and kg (from =PREV_*_1RM=).  =LOAD_START= → =LOAD_END=
+  is interpolated over the loading weeks of the sub-phase (or phase); a
+  deload week halves the sets.  Volume targets (acceleration m, max-velocity m,
+  speed-endurance m, plyo contacts) are listed per session, halved on deload.
+- *Editing.* Edit the generated lines freely, then press =SPC o S l= on that
+  week: it gets =:LOCKED: yes= and regeneration leaves it alone (past weeks are
+  kept anyway).  Unlocked current/future weeks are rebuilt.
+- Not covered: the injury/spacing rules (48 h between max-velocity days, ...)
+  and the F-V bias are not applied to the selection.  Volume targets are
+  constant inside a sub-phase.
 *** Using it from the phone
 =glz/enable-sprint= is on for Android too: the same captures work on the
 phone, so you can log a session right after training.  Syncthing then

@@ -19,6 +19,10 @@
 ;;   s/t/r                         capture a session / test / race
 ;;   y `sprint-season-summary'     best values of the season for PREV_ macros
 ;;   n `sprint-new-season'         create next year's config/plan/log
+;;   l `sprint-lock-week'          keep a hand-edited week on regeneration
+;;
+;; Generation also picks exercises from the DB per session (see "Exercise
+;; selection and load progression") and interpolates the weekly lift loads.
 ;;
 ;; Lives in the dotfiles next to Config.org and is loaded from there (see the
 ;; "Sprint training system" section of Config.org).
@@ -58,14 +62,23 @@
 ;;;; Files and config
 
 (defun sprint-season ()
-  "Return the season year to work on."
+  "Return the season year to work on.
+Unless `sprint-season-year' is set: the latest season whose SEASON_START is at
+most 21 days away (so next year's files, once created, do not take over until
+the new season is about to begin); if none qualifies, the earliest season."
   (or sprint-season-year
-      (let (years)
+      (let (seasons)
         (dolist (f (directory-files sprint-directory))
           (when (string-match "\\`sprint_config_\\([0-9]+\\)\\.org\\'" f)
-            (push (string-to-number (match-string 1 f)) years)))
-        (if years (apply #'max years)
-          (user-error "No sprint_config_YYYY.org in %s" sprint-directory)))))
+            (let* ((y (string-to-number (match-string 1 f)))
+                   (start (cdr (assoc "SEASON_START"
+                                      (sprint--read-macros (expand-file-name f sprint-directory))))))
+              (push (cons y (and (sprint--date-p start) (sprint--abs start))) seasons))))
+        (unless seasons (user-error "No sprint_config_YYYY.org in %s" sprint-directory))
+        (setq seasons (sort seasons (lambda (a b) (< (car a) (car b)))))
+        (let ((limit (+ (sprint--today) 21)))
+          (or (car (car (last (cl-remove-if-not (lambda (s) (and (cdr s) (<= (cdr s) limit))) seasons))))
+              (car (car seasons)))))))
 
 (defun sprint-file (kind &optional year)
   "Path of the KIND (config, plan, log, schedule) file for YEAR."
@@ -293,6 +306,265 @@ default, race, train or taper (the 10-day taper table)."
                                   (and (sprint--date-p v) (sprint--abs v))))
                     '("OUTDOOR_CHAMPIONSHIP" "SECONDARY_CHAMPIONSHIP"))))
 
+;;;; Exercise selection and load progression
+;;
+;; Turns the category prose of the weekly templates into concrete exercises from
+;; TrainingDB.org and puts the week's number on the lifts.  The result is a
+;; starting point: edit the generated list, and add ":LOCKED: yes" to the week
+;; (see `sprint-lock-week') so regeneration leaves it alone.
+
+(defcustom sprint-fill-sessions t
+  "Non-nil: `sprint-generate-schedule' lists exercises under each session."
+  :type 'boolean)
+
+(defcustom sprint-exercises-per-category
+  '(("Technical Drills" . 3) ("Warm-Up & Activation" . 2) ("Mobility & Flexibility" . 2)
+    ("Core & Trunk" . 2) ("Acceleration" . 2) ("Plyometrics" . 2))
+  "Number of exercises picked per category and session (default: see below)."
+  :type '(alist :key-type string :value-type integer))
+
+(defcustom sprint-default-exercises-per-category 1
+  "Exercises per category and session when not in `sprint-exercises-per-category'."
+  :type 'integer)
+
+(defcustom sprint-unavailable-equipment nil
+  "Exercises whose EQUIPMENT matches one of these regexps are never picked."
+  :type '(repeat string))
+
+(defcustom sprint-warmup-on-high-days t
+  "Non-nil: add Warm-Up & Activation to High-CNS sessions that do not name it."
+  :type 'boolean)
+
+(defvar sprint--all-weeks nil "Week records of the season being generated.")
+(defvar sprint--usage nil "Hash name -> (count . last-week) while generating.")
+(defvar sprint--db nil "Parsed exercise DB while generating.")
+
+(defun sprint--parse-db ()
+  "Exercises of `sprint-db-file' as plists."
+  (when (file-exists-p sprint-db-file)
+    (with-temp-buffer
+      (insert-file-contents sprint-db-file)
+      (let (res)
+        (while (re-search-forward "^\\*\\* \\(.+?\\)[ \t]*$" nil t)
+          (let ((name (match-string 1))
+                (end (or (save-excursion (and (re-search-forward "^\\*+ " nil t) (match-beginning 0)))
+                         (point-max)))
+                props)
+            (while (re-search-forward "^:\\([A-Z_]+\\):[ \t]+\\(.*?\\)[ \t]*$" end t)
+              (push (cons (match-string 1) (match-string 2)) props))
+            (when (assoc "CATEGORY" props)
+              (push (list :name name
+                          :cat (cdr (assoc "CATEGORY" props))
+                          :sub (cdr (assoc "SUBCATEGORY" props))
+                          :cns (or (cdr (assoc "CNS_DEMAND" props)) "")
+                          :equip (or (cdr (assoc "EQUIPMENT" props)) "")
+                          :vol (cdr (assoc "TYPICAL_VOLUME" props)))
+                    res))))
+        (nreverse res)))))
+
+(defun sprint--db ()
+  (or sprint--db (setq sprint--db (sprint--parse-db))))
+
+(defun sprint--cns-rank (s)
+  (pcase (downcase (string-trim s))
+    ("very low" 0) ("low" 1) ("low-medium" 1.5) ("medium" 2)
+    ("medium-high" 3) ("high" 4) ("very high" 5) (_ 0)))
+
+(defun sprint--cns-cap (day-cns)
+  (pcase (downcase day-cns) ("low" 2) ("medium" 3) (_ 5)))
+
+(defconst sprint--category-keywords
+  '(("Warm-?Up"                                    . "Warm-Up & Activation")
+    ("Technical Drills"                            . "Technical Drills")
+    ("Acceleration\\|Block starts"                 . "Acceleration")
+    ("Max Velocity\\|Flying"                       . "Max Velocity")
+    ("Speed Endurance"                             . "Speed Endurance")
+    ("Special Endurance II"                        . "Special Endurance II")
+    ("Special Endurance I\\([^I]\\|$\\)"           . "Special Endurance I")
+    ("Extensive Tempo"                             . "Extensive Tempo")
+    ("Intensive Tempo"                             . "Intensive Tempo")
+    ("Plyo"                                        . "Plyometrics")
+    ("Max Force"                                   . "Strength — Max Force")
+    ("Eccentric"                                   . "Strength — Eccentric")
+    ("Strength-Power\\|Power clean\\|Trap Bar Jumps\\|Jump Squat" . "Strength-Power")
+    ("Resisted\\|[Ss]led\\|Contrast"               . "Resisted Sprinting")
+    ("Overspeed\\|Assisted\\|Downhill"             . "Assisted / Overspeed")
+    ("Med\\(icine\\)? ?[Bb]all"                    . "Medicine Ball Power")
+    ("Isometric"                                   . "Isometrics")
+    ("Core"                                        . "Core & Trunk")
+    ("Mobility"                                    . "Mobility & Flexibility")
+    ("Recovery"                                    . "Recovery & Regeneration"))
+  "Regexps over a session description and the DB category each one names.")
+
+(defun sprint--content-categories (content)
+  "DB categories named in CONTENT, in order of appearance."
+  (let ((case-fold-search t) found)
+    (dolist (k sprint--category-keywords)
+      (when (string-match (car k) content)
+        (push (cons (match-beginning 0) (cdr k)) found)))
+    ;; a bare "Strength" names no sub-category: default to max force
+    (when (and (string-match-p "\\bStrength\\b" content)
+               (not (cl-find-if (lambda (f) (string-prefix-p "Strength" (cdr f))) found)))
+      (push (cons (string-match "\\bStrength\\b" content) "Strength — Max Force") found))
+    (mapcar #'cdr (sort found (lambda (a b) (< (car a) (car b)))))))
+
+;; Load progression
+
+(defun sprint--scopes (w)
+  "Config scopes of week W, most specific first."
+  (let ((ph (plist-get w :phase)))
+    (delq nil (list (plist-get w :sub) ph (and (member ph '("PH3" "PH6" "PH7")) "COMP")))))
+
+(defun sprint--arc-frac (w scope)
+  "Position (0..1) of week W along the load weeks of SCOPE."
+  (let* ((sub (string-match-p "_SP" scope))
+         (ws (cl-remove-if-not
+              (lambda (x) (and (equal (plist-get x :phase) (plist-get w :phase))
+                               (or (not sub) (equal (plist-get x :sub) scope))
+                               (not (equal (plist-get x :type) "DELOAD"))
+                               (<= (plist-get x :n) (plist-get w :n))))
+              sprint--all-weeks))
+         (total (cl-count-if
+                 (lambda (x) (and (equal (plist-get x :phase) (plist-get w :phase))
+                                  (or (not sub) (equal (plist-get x :sub) scope))
+                                  (not (equal (plist-get x :type) "DELOAD"))))
+                 sprint--all-weeks)))
+    (if (> total 1) (/ (float (max 0 (1- (length ws)))) (1- total)) 0.0)))
+
+(defun sprint--num-of (s) (and s (string-match "-?[0-9.]+" s) (string-to-number (match-string 0 s))))
+
+(defun sprint--find (cfg key w)
+  "Scope of the first config entry KEY_<scope>_SETS (or _VOL-like KEY_<scope>) for W."
+  (cl-find-if (lambda (s) (or (sprint--get cfg (format "%s_%s_SETS" key s))
+                              (sprint--get cfg (format "%s_%s" key s))
+                              (sprint--get cfg (format "%s_%s_MAX" key s))))
+              (sprint--scopes w)))
+
+(defconst sprint--lift-keys
+  '(("\\`Back Squat" . "SQUAT") ("\\`Trap Bar Deadlift" . "TBDL")
+    ("\\`Power Clean" . "PCLEAN") ("Nordic" . "NORDIC")))
+
+(defun sprint--lift-prescription (e w cfg deload)
+  "Sets × reps @ load for exercise E in week W from the config, or nil."
+  (let* ((key (cdr (cl-find-if (lambda (k) (string-match-p (car k) (plist-get e :name)))
+                               sprint--lift-keys)))
+         (scope (and key (sprint--find cfg key w))))
+    (when scope
+      (let* ((g (lambda (f) (sprint--get cfg (format "%s_%s_%s" key scope f))))
+             (sets (sprint--num-of (funcall g "SETS")))
+             (reps (funcall g "REPS"))
+             (variant (funcall g "VARIANT"))
+             (single (funcall g "LOAD"))
+             (start (funcall g "LOAD_START")) (end (funcall g "LOAD_END"))
+             (pct (cond (single (sprint--num-of single))
+                        ((and start end)
+                         (let ((a (sprint--num-of start)) (b (sprint--num-of end)))
+                           (+ a (* (- b a) (sprint--arc-frac w scope)))))))
+             (rm (sprint--num-of (sprint--get cfg (format "PREV_%s_1RM" key)))))
+        (when (and sets reps)
+          (concat (format "%d×%s" (if deload (ceiling (/ sets 2.0)) (truncate sets)) reps)
+                  (when pct
+                    (format " @ %d%%%s" (round pct)
+                            (if rm (format " (≈ %s kg)" (* 2.5 (round (/ (* rm pct 0.01) 2.5)))) "")))
+                  (when variant (format " (%s)" variant))))))))
+
+(defconst sprint--volume-keys
+  '(("Acceleration" "ACC_VOL" "m") ("Max Velocity" "MAXVEL_VOL" "m")
+    ("Speed Endurance" "SE_VOL" "m") ("Plyometrics" "PLY_CONTACTS" "contacts"))
+  "Category, config key and unit of the per-session volume targets.")
+
+(defun sprint--volume-target (cat w cfg deload)
+  (let* ((k (cdr (assoc cat sprint--volume-keys)))
+         (scope (and k (sprint--find cfg (car k) w)))
+         (v (and scope (sprint--num-of (or (sprint--get cfg (format "%s_%s" (car k) scope))
+                                           (sprint--get cfg (format "%s_%s_MAX" (car k) scope)))))))
+    (when v (format "%s %d %s%s" cat (round (if deload (* v 0.5) v)) (cadr k)
+                    (if deload " (deload)" "")))))
+
+;; Selection
+
+(defun sprint--hash (s)
+  (let ((h 7)) (dolist (c (string-to-list s) h) (setq h (mod (+ (* h 31) c) 100003)))))
+
+(defun sprint--key< (a b)
+  (cl-loop for x in a for y in b
+           when (< x y) return t
+           when (> x y) return nil))
+
+(defun sprint--pick (pool n w)
+  "Pick N exercises of POOL: least used first, different sub-categories, stable ties."
+  (let (chosen)
+    (dotimes (_ (min n (length pool)))
+      (let* ((subs (mapcar (lambda (e) (plist-get e :sub)) chosen))
+             (rest (cl-remove-if (lambda (e) (memq e chosen)) pool))
+             (key (lambda (e)
+                    (let ((u (or (gethash (plist-get e :name) sprint--usage) '(0 . 0))))
+                      (list (if (member (plist-get e :sub) subs) 1 0) (car u) (cdr u)
+                            (sprint--hash (format "%s/%d" (plist-get e :name) (plist-get w :n))))))))
+        (push (car (sort rest (lambda (a b) (sprint--key< (funcall key a) (funcall key b))))) chosen)))
+    (nreverse chosen)))
+
+(defun sprint--scale-vol (vol deload)
+  (if (and deload (string-match "\\`\\([0-9]+\\)×" vol))
+      (replace-match (number-to-string (ceiling (/ (string-to-number (match-string 1 vol)) 2.0)))
+                     t t vol 1)
+    vol))
+
+(defun sprint--fill-session (w cfg cns content used)
+  "Exercise lines for a session of week W, or nil.  USED: hash of this week's picks."
+  (let* ((case-fold-search t)
+         (deload (equal (plist-get w :type) "DELOAD"))
+         (pinned (cl-remove-if-not
+                  (lambda (e) (string-match-p (regexp-quote (plist-get e :name)) content))
+                  (sprint--db)))
+         (cats (sprint--content-categories content))
+         (cap (sprint--cns-cap cns))
+         lines targets)
+    (dolist (e pinned) (cl-pushnew (plist-get e :cat) cats :test #'equal))
+    (setq cats (nreverse cats))
+    (when (and cats sprint-warmup-on-high-days (equal (downcase cns) "high")
+               (not (member "Warm-Up & Activation" cats)))
+      (push "Warm-Up & Activation" cats))
+    (when (and cats (not (string-match-p "RACE DAY" content)))
+      (dolist (cat (if (member "Warm-Up & Activation" cats)
+                       (cons "Warm-Up & Activation" (remove "Warm-Up & Activation" cats))
+                     cats))
+        (let* ((all (cl-remove-if
+                     (lambda (e) (or (not (equal (plist-get e :cat) cat))
+                                     (cl-some (lambda (re) (string-match-p re (plist-get e :equip)))
+                                              sprint-unavailable-equipment)))
+                     (sprint--db)))
+               (pool (or (cl-remove-if (lambda (e) (gethash (plist-get e :name) used)) all) all))
+               (pool (or (cl-remove-if (lambda (e) (> (sprint--cns-rank (plist-get e :cns)) cap)) pool)
+                         pool))
+               (pin (cl-remove-if-not (lambda (e) (memq e pinned)) pool))
+               (conf (cl-remove-if-not (lambda (e) (sprint--lift-prescription e w cfg deload)) pool))
+               (n (or (cdr (assoc cat sprint-exercises-per-category))
+                      sprint-default-exercises-per-category))
+               (picks (cond (pin (sprint--pick pin (max n (length pin)) w))
+                            (conf (sprint--pick conf 1 w))
+                            (t (sprint--pick pool n w)))))
+          (when picks
+            (push (format "- %s: %s\n" cat
+                          (mapconcat
+                           (lambda (e)
+                             (let ((p (sprint--lift-prescription e w cfg deload))
+                                   (v (plist-get e :vol)))
+                               (puthash (plist-get e :name) t used)
+                               (let ((u (or (gethash (plist-get e :name) sprint--usage) '(0 . 0))))
+                                 (puthash (plist-get e :name) (cons (1+ (car u)) (plist-get w :n))
+                                          sprint--usage))
+                               (cond (p (format "%s %s" (plist-get e :name) p))
+                                     ((and v (not (string-empty-p v)))
+                                      (format "%s %s" (plist-get e :name) (sprint--scale-vol v deload)))
+                                     (t (plist-get e :name)))))
+                           picks "; "))
+                  lines))
+          (let ((tg (sprint--volume-target cat w cfg deload))) (when tg (push tg targets))))))
+    (when lines
+      (concat (mapconcat #'identity (nreverse lines) "")
+              (when targets (format "- Targets: %s\n" (mapconcat #'identity (nreverse targets) " · ")))))))
+
 ;;;; Schedule generation
 
 (defun sprint--cns-tag (cns)
@@ -300,12 +572,12 @@ default, race, train or taper (the 10-day taper table)."
     (cond ((string-match-p "\\`[a-z]+\\'" c) c)
           (t nil))))
 
-(defun sprint--entry (abs cns content tags)
+(defun sprint--entry (abs cns content tags &optional body)
   (let ((tags (delete-dups (delq nil (append (list (sprint--cns-tag cns)) tags)))))
-    (format "** TODO [%s] %s%s\nSCHEDULED: %s\n"
+    (format "** TODO [%s] %s%s\nSCHEDULED: %s\n%s"
             cns content
             (if tags (concat " :" (mapconcat #'identity tags ":") ":") "")
-            (sprint--ts abs))))
+            (sprint--ts abs) (or body ""))))
 
 (defun sprint--week-text (w cfg templates races champs warnings)
   "Org text for week W.  Returns (text . warnings)."
@@ -321,6 +593,7 @@ default, race, train or taper (the 10-day taper table)."
          (rows (or (sprint--template templates tbl-phase kind)
                    (sprint--template templates tbl-phase "default")))
          (taper (sprint--template templates "PH7" "taper"))
+         (used (make-hash-table :test #'equal))
          (entries nil))
     (when (and (equal kind "race") week-races)
       (let* ((race-dow (sprint--dow (car (car week-races))))
@@ -350,7 +623,9 @@ default, race, train or taper (the 10-day taper table)."
               (push (sprint--entry abs (nth 1 row)
                                    (concat (if deload "DELOAD −50% volume: " "") (nth 2 row))
                                    (delq nil (list (and deload "deload")
-                                                   (and race "race"))))
+                                                   (and race "race")))
+                                   (and sprint-fill-sessions
+                                        (sprint--fill-session w cfg (nth 1 row) (nth 2 row) used)))
                     entries)))))
         (when (and race (not (and champ (= champ abs))) (not (equal kind "race")))
           (push (sprint--entry abs "—" (format "RACE — %s" (cdr race)) '("race")) entries))))
@@ -399,15 +674,24 @@ states survive); the current week onward is regenerated."
                     (dolist (c (cdr (split-string s "^\\* Week " t)))
                       (push (concat "* Week " c) chunks))
                     (nreverse chunks)))))
-         (kept (cl-remove-if-not (lambda (c) (let ((s (sprint--week-start-of-chunk c)))
-                                               (and s (< s cutoff))))
-                                 old))
+         ;; weeks before the current one, and weeks marked ":LOCKED: yes", stay as written
+         (kept (cl-remove-if-not
+                (lambda (c) (let ((s (sprint--week-start-of-chunk c)))
+                              (and s (or (< s cutoff) (string-match-p "^:LOCKED:[ \t]+\\(yes\\|t\\|true\\)" c)))))
+                old))
          (kept-n (length kept))
+         (kept-starts (mapcar #'sprint--week-start-of-chunk kept))
+         (sprint--all-weeks weeks)
+         (sprint--db nil)
+         (sprint--usage (make-hash-table :test #'equal))
          (warnings nil) (texts nil))
+    ;; Every week is generated, in order, so that the exercise rotation sees the
+    ;; same history on each run; only the weeks not kept are written.
     (dolist (w weeks)
-      (when (>= (plist-get w :start) cutoff)
-        (let ((r (sprint--week-text w cfg templates races champs warnings)))
-          (push (car r) texts) (setq warnings (cdr r)))))
+      (let ((r (sprint--week-text w cfg templates races champs nil)))
+        (unless (memq (plist-get w :start) kept-starts)
+          (push (cons (plist-get w :start) (car r)) texts)
+          (setq warnings (append (cdr r) warnings)))))
     (dolist (c (sprint--validate-dates cfg weeks))
       (push c warnings))
     (with-temp-file out
@@ -418,11 +702,25 @@ states survive); the current week onward is regenerated."
       (dolist (w (delete-dups (reverse warnings)))
         (insert "# WARNING: " w "\n"))
       (insert "\n")
-      (dolist (c kept) (insert (string-trim-right c) "\n"))
-      (dolist (tx (nreverse texts)) (insert tx)))
+      (dolist (c (sort (append (mapcar (lambda (c) (cons (sprint--week-start-of-chunk c)
+                                                       (concat (string-trim-right c) "\n")))
+                                       kept)
+                               texts)
+                       (lambda (a b) (< (car a) (car b)))))
+        (insert (cdr c))))
     (message "Sprint schedule: %d weeks (%d kept, %d generated) → %s"
              (length weeks) kept-n (- (length weeks) kept-n) out)
     out))
+
+;;;###autoload
+(defun sprint-lock-week ()
+  "Toggle :LOCKED: on the week at point in the schedule, so regeneration keeps it."
+  (interactive)
+  (save-excursion
+    (while (and (org-up-heading-safe)))
+    (if (org-entry-get nil "LOCKED")
+        (progn (org-delete-property "LOCKED") (message "Week unlocked"))
+      (org-set-property "LOCKED" "yes") (message "Week locked: regeneration will keep it"))))
 
 ;;;; Validation
 
@@ -820,6 +1118,7 @@ plan; for a single phase or week narrow with C-x n s / use C-c C-e C-s."
     (define-key m "y" #'sprint-season-summary)
     (define-key m "n" #'sprint-new-season)
     (define-key m "e" #'sprint-export)
+    (define-key m "l" #'sprint-lock-week)
     m)
   "Keymap for the sprint commands.")
 
@@ -832,7 +1131,8 @@ plan; for a single phase or week narrow with C-x n s / use C-c C-e C-s."
     "i" "today info"          "a" "sprint agenda"
     "s" "log session"         "t" "log test"
     "r" "log race"            "y" "season summary"
-    "n" "new season"          "e" "export"))
+    "n" "new season"          "e" "export"
+    "l" "lock/unlock week"))
 
 (provide 'sprint)
 ;;; sprint.el ends here
