@@ -891,6 +891,19 @@ In every other state KEY keeps its current `org-mode-map' binding."
   ;; Refuse blind edits on folded text instead of silently corrupting structure.
   (org-catch-invisible-edits 'show-and-error))
 
+;; Org → Typst exporter (C-c C-e y …), used for Personal/CVTex/CV.org.
+;; The `typst' binary and the Roboto font come from the Nix org toolchain
+;; (nixos/modules/home/org-toolchain.nix); --font-path points typst at the
+;; profile's fonts so it doesn't depend on fontconfig being set up.
+(use-package ox-typst
+  :ensure t
+  :after org
+  :custom
+  (org-typst-process
+   (concat "typst c --font-path "
+           (shell-quote-argument (expand-file-name "~/.nix-profile/share/fonts"))
+           " \"%s\"")))
+
 (use-package org-bullets
   :after org
   :hook (org-mode . org-bullets-mode)
@@ -1089,6 +1102,43 @@ In every other state KEY keeps its current `org-mode-map' binding."
                   (> pixel-w pixel-h) (< mm-w mm-h))
              (cons (/ (* 25.4 pixel-w) mm-h) (/ (* 25.4 pixel-h) mm-w))
            (funcall orig-fn)))))))
+
+;; Preview SVGs are rendered once, with the text scale at that moment baked
+;; into dvisvgm's --scale, so zooming afterwards leaves them at the old size.
+;; Re-render the existing previews (debounced) whenever the zoom changes.
+(when glz/enable-latex-preview
+  (defvar-local glz/latex-rescale-timer nil)
+
+  (defun glz/org-latex-rescale ()
+    "Regenerate this buffer's LaTeX previews at the current text scale."
+    (setq glz/latex-rescale-timer nil)
+    (when (and (derived-mode-p 'org-mode)
+               (seq-some (lambda (o) (overlay-get o 'preview-state))
+                         (overlays-in (point-min) (point-max))))
+      (org-auctex-preview-clearout-buffer)
+      (org-auctex-preview-buffer)))
+
+  (defun glz/org-latex-schedule-rescale ()
+    (when (derived-mode-p 'org-mode)
+      (when (timerp glz/latex-rescale-timer)
+        (cancel-timer glz/latex-rescale-timer))
+      (setq glz/latex-rescale-timer
+            (run-with-idle-timer 0.6 nil
+                                 (let ((buf (current-buffer)))
+                                   (lambda ()
+                                     (when (buffer-live-p buf)
+                                       (with-current-buffer buf
+                                         (glz/org-latex-rescale)))))))))
+
+  (add-hook 'text-scale-mode-hook #'glz/org-latex-schedule-rescale)
+
+  (defvar glz/latex-preview-scale-factor 1.3
+    "Extra multiplier on AUCTeX's computed preview scale; raise if equations look small.")
+
+  (with-eval-after-load 'preview
+    (advice-add 'preview-scale-from-face :filter-return
+                (lambda (fn)
+                  (lambda () (* glz/latex-preview-scale-factor (funcall fn)))))))
 
 (defun glz/org-mode-visual-fill ()
   ;; 300 columns assumes a desktop monitor; a phone in portrait can't use

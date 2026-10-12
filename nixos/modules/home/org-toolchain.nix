@@ -32,5 +32,10 @@
     # `pdftoppm`/`pdftocairo`/`pdfimages`, for cropping a scan of the
     # original handwritten sketch out of a source PDF page
     poppler-utils
+
+    # Org → Typst export (ox-typst in post-init.el calls `typst c`), used for
+    # the CV in PKDB/Personal/CVTex; Roboto is the CV's font (cv.typ).
+    typst
+    roboto
   ];
 }
