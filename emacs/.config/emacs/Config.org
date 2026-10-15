@@ -476,7 +476,9 @@ desktop checkout; fine-tune further on-device with the toggle map's
     (modifier-bar-mode 1))
   (when (fboundp 'pixel-scroll-precision-mode)
     (pixel-scroll-precision-mode 1))
-  (set-face-attribute 'default nil :height 130))
+  (set-face-attribute 'default nil :height 130)
+    (setq default-directory "/data/data/com.termux/files/home/") ; Point by default to the termux home to get the syncthing stuff synched
+  (setq overriding-text-conversion-style nil))
 #+end_src
 
 ** Startup performance display
