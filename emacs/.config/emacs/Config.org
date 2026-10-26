@@ -528,11 +528,12 @@ desktop tool bar (new file, open, cut, copy, paste, ...) is replaced by:
 |------------+---------------------------------------------------------------|
 | home       | dashboard                                                     |
 | new        | org-capture                                                   |
-| spell      | show the on-screen keyboard (also =SPC t k=)                  |
 | left-arrow | back: leave the minibuffer, close a split, or previous buffer |
 | save       | save buffer                                                   |
 | checked    | finish: what =C-c C-c= does here (capture, log form, ...)     |
 | cancel     | abort: what =C-c C-k= does here                               |
+| keyboard   | show the on-screen keyboard (also =SPC t k=); drawn in the    |
+|            | config, since Emacs has no keyboard icon                      |
 
 Seven buttons, so the bar stays one row on a phone; training, agenda and
 notes are one tap away on the dashboard, undo is =u=, and =M-x= is Alt+x or
@@ -609,13 +610,46 @@ A capture is never dropped by accident: there it only reminds of the keys."
     (with-eval-after-load 'which-key
       (which-key-add-keymap-based-replacements glz/toggle-map "k" "keyboard")))
 
+  ;; Emacs ships no keyboard icon, so the keyboard button draws one: a
+  ;; monochrome XBM bitmap (supported by every build), # = ink.
+  (defun glz/xbm-icon (rows)
+    "Tool bar image drawn by ROWS, strings of equal length where # is ink."
+    (create-image (vconcat (mapcar (lambda (row) (apply #'bool-vector (mapcar (lambda (c) (eq c ?#)) row)))
+                                   rows))
+                  'xbm t :width (length (car rows)) :height (length rows)))
+
+  (defconst glz/keyboard-icon
+    (glz/xbm-icon '("........................"
+                    "........................"
+                    "........................"
+                    "........................"
+                    "........................"
+                    ".######################."
+                    ".#....................#."
+                    ".#.##.##.##.##.##.##..#."
+                    ".#.##.##.##.##.##.##..#."
+                    ".#....................#."
+                    ".#..##.##.##.##.##.##.#."
+                    ".#..##.##.##.##.##.##.#."
+                    ".#....................#."
+                    ".#.##..##########..##.#."
+                    ".#.##..##########..##.#."
+                    ".#....................#."
+                    ".######################."
+                    "........................"
+                    "........................"
+                    "........................"
+                    "........................"
+                    "........................"
+                    "........................"
+                    "........................")))
+
   (defconst glz/tool-bar-map
     (let ((map (make-sparse-keymap)))
       ;; Seven buttons, one row on a phone.  Training, agenda, notes, ... are
       ;; one tap away on the dashboard; undo is u, M-x is Alt+x or SPC m x.
       (dolist (item '(("home" glz/dashboard "Dashboard")
                       ("new" org-capture "Capture")
-                      ("spell" glz/show-keyboard "Show the keyboard")
                       ("left-arrow" glz/android-back "Back")
                       ("save" save-buffer "Save")
                       ("checked" glz/finish-key "Finish (C-c C-c)"
@@ -624,6 +658,10 @@ A capture is never dropped by accident: there it only reminds of the keys."
                        :enable (commandp (key-binding (kbd "C-c C-k"))))))
         (pcase-let ((`(,icon ,cmd ,help . ,props) item))
           (apply #'tool-bar-local-item icon cmd cmd map :help help props)))
+      ;; Last, where it is easy to find: the keyboard.
+      (define-key-after map [glz/show-keyboard]
+        `(menu-item "Keyboard" glz/show-keyboard :help "Show the keyboard"
+                    :image ,glz/keyboard-icon))
       map)
     "Tool bar of the Android frames.")
 
@@ -672,16 +710,6 @@ Hidden buffers (name starting with a space: which-key, transient, ...) and
         doom-modeline-workspace-name nil))
 #+end_src
 
-** Startup performance display
-#+begin_src emacs-lisp
-(defun glz/display-startup-time ()
-  (message "Emacs loaded in %s with %d garbage collections."
-           (format "%.2f seconds"
-                   (float-time (time-subtract after-init-time before-init-time)))
-           gcs-done))
-
-(add-hook 'emacs-startup-hook #'glz/display-startup-time)
-#+end_src
 ** Basic UI settings
 *** Column numbers in mode line
 #+begin_src emacs-lisp

@@ -139,13 +139,46 @@ A capture is never dropped by accident: there it only reminds of the keys."
     (with-eval-after-load 'which-key
       (which-key-add-keymap-based-replacements glz/toggle-map "k" "keyboard")))
 
+  ;; Emacs ships no keyboard icon, so the keyboard button draws one: a
+  ;; monochrome XBM bitmap (supported by every build), # = ink.
+  (defun glz/xbm-icon (rows)
+    "Tool bar image drawn by ROWS, strings of equal length where # is ink."
+    (create-image (vconcat (mapcar (lambda (row) (apply #'bool-vector (mapcar (lambda (c) (eq c ?#)) row)))
+                                   rows))
+                  'xbm t :width (length (car rows)) :height (length rows)))
+
+  (defconst glz/keyboard-icon
+    (glz/xbm-icon '("........................"
+                    "........................"
+                    "........................"
+                    "........................"
+                    "........................"
+                    ".######################."
+                    ".#....................#."
+                    ".#.##.##.##.##.##.##..#."
+                    ".#.##.##.##.##.##.##..#."
+                    ".#....................#."
+                    ".#..##.##.##.##.##.##.#."
+                    ".#..##.##.##.##.##.##.#."
+                    ".#....................#."
+                    ".#.##..##########..##.#."
+                    ".#.##..##########..##.#."
+                    ".#....................#."
+                    ".######################."
+                    "........................"
+                    "........................"
+                    "........................"
+                    "........................"
+                    "........................"
+                    "........................"
+                    "........................")))
+
   (defconst glz/tool-bar-map
     (let ((map (make-sparse-keymap)))
       ;; Seven buttons, one row on a phone.  Training, agenda, notes, ... are
       ;; one tap away on the dashboard; undo is u, M-x is Alt+x or SPC m x.
       (dolist (item '(("home" glz/dashboard "Dashboard")
                       ("new" org-capture "Capture")
-                      ("spell" glz/show-keyboard "Show the keyboard")
                       ("left-arrow" glz/android-back "Back")
                       ("save" save-buffer "Save")
                       ("checked" glz/finish-key "Finish (C-c C-c)"
@@ -154,6 +187,10 @@ A capture is never dropped by accident: there it only reminds of the keys."
                        :enable (commandp (key-binding (kbd "C-c C-k"))))))
         (pcase-let ((`(,icon ,cmd ,help . ,props) item))
           (apply #'tool-bar-local-item icon cmd cmd map :help help props)))
+      ;; Last, where it is easy to find: the keyboard.
+      (define-key-after map [glz/show-keyboard]
+        `(menu-item "Keyboard" glz/show-keyboard :help "Show the keyboard"
+                    :image ,glz/keyboard-icon))
       map)
     "Tool bar of the Android frames.")
 
@@ -200,14 +237,6 @@ Hidden buffers (name starting with a space: which-key, transient, ...) and
         doom-modeline-buffer-encoding nil
         doom-modeline-minor-modes nil
         doom-modeline-workspace-name nil))
-
-(defun glz/display-startup-time ()
-  (message "Emacs loaded in %s with %d garbage collections."
-           (format "%.2f seconds"
-                   (float-time (time-subtract after-init-time before-init-time)))
-           gcs-done))
-
-(add-hook 'emacs-startup-hook #'glz/display-startup-time)
 
 (column-number-mode 1)
 
