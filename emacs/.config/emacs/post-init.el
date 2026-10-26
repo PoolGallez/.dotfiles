@@ -1782,6 +1782,31 @@ LABEL names the Termux:Widget script.")
 (use-package all-the-icons-dired
   :hook (dired-mode . all-the-icons-dired-mode))
 
+(when (eq glz/platform 'android)
+  (defun glz/android-install-icon-fonts (&rest _)
+    "Download the nerd-icons and all-the-icons fonts into ~/fonts."
+    (interactive)
+    (require 'nerd-icons)
+    (require 'all-the-icons)
+    (let ((dir (expand-file-name "~/fonts/")))
+      (make-directory dir t)
+      (pcase-dolist (`(,url . ,fonts)
+                     `(("https://raw.githubusercontent.com/rainstormstudio/nerd-icons.el/main/fonts/"
+                        . ,nerd-icons-font-names)
+                       ("https://raw.githubusercontent.com/domtronn/all-the-icons.el/master/fonts/"
+                        . ,all-the-icons-font-names)))
+        (dolist (font fonts)
+          (url-copy-file (concat url font) (expand-file-name font dir) t)))
+      (message "Icon fonts saved in %s: restart Emacs to use them" dir)))
+  (advice-add 'nerd-icons-install-fonts :override #'glz/android-install-icon-fonts)
+  (advice-add 'all-the-icons-install-fonts :override #'glz/android-install-icon-fonts)
+
+  ;; No icon font yet: plain mode line and Dired instead of random characters.
+  (unless (find-font (font-spec :family "Symbols Nerd Font Mono"))
+    (setq doom-modeline-icon nil))
+  (unless (find-font (font-spec :family "all-the-icons"))
+    (remove-hook 'dired-mode-hook #'all-the-icons-dired-mode)))
+
 (when glz/enable-magit
 (use-package ediff
   :ensure nil

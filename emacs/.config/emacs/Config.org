@@ -2605,6 +2605,52 @@ LABEL names the Termux:Widget script.")
 (use-package all-the-icons-dired
   :hook (dired-mode . all-the-icons-dired-mode))
 #+end_src
+*** Icon fonts on Android
+The mode line (doom-modeline → nerd-icons) and Dired (all-the-icons-dired)
+draw icons with special fonts; without them a phone shows random
+characters.  Their own installers do not work on Android: they know only the
+Linux and macOS font folders, then run =fc-cache=, which does not exist
+there.  Emacs on Android reads fonts from the system and from the =fonts=
+folder in its own home (=~/fonts=, i.e. =/data/data/org.gnu.emacs/files/fonts=),
+and only at startup (see the "Android Fonts" node of the Emacs manual).
+
+So on Android =M-x nerd-icons-install-fonts= and =M-x all-the-icons-install-fonts=
+both download every icon font into =~/fonts=; then restart Emacs.  Until the
+fonts are there, the phone draws no icons rather than wrong ones.
+
+If the download fails (no TLS in the Emacs build and no Termux =gnutls-cli=),
+fetch the font from Termux instead, which can write into Emacs's folder thanks
+to the shared user ID:
+#+begin_example
+mkdir -p /data/data/org.gnu.emacs/files/fonts && cd $_
+curl -LO https://raw.githubusercontent.com/rainstormstudio/nerd-icons.el/main/fonts/NFM.ttf
+#+end_example
+#+begin_src emacs-lisp
+(when (eq glz/platform 'android)
+  (defun glz/android-install-icon-fonts (&rest _)
+    "Download the nerd-icons and all-the-icons fonts into ~/fonts."
+    (interactive)
+    (require 'nerd-icons)
+    (require 'all-the-icons)
+    (let ((dir (expand-file-name "~/fonts/")))
+      (make-directory dir t)
+      (pcase-dolist (`(,url . ,fonts)
+                     `(("https://raw.githubusercontent.com/rainstormstudio/nerd-icons.el/main/fonts/"
+                        . ,nerd-icons-font-names)
+                       ("https://raw.githubusercontent.com/domtronn/all-the-icons.el/master/fonts/"
+                        . ,all-the-icons-font-names)))
+        (dolist (font fonts)
+          (url-copy-file (concat url font) (expand-file-name font dir) t)))
+      (message "Icon fonts saved in %s: restart Emacs to use them" dir)))
+  (advice-add 'nerd-icons-install-fonts :override #'glz/android-install-icon-fonts)
+  (advice-add 'all-the-icons-install-fonts :override #'glz/android-install-icon-fonts)
+
+  ;; No icon font yet: plain mode line and Dired instead of random characters.
+  (unless (find-font (font-spec :family "Symbols Nerd Font Mono"))
+    (setq doom-modeline-icon nil))
+  (unless (find-font (font-spec :family "all-the-icons"))
+    (remove-hook 'dired-mode-hook #'all-the-icons-dired-mode)))
+#+end_src
 *** Ediff settings
 Ediff uses =run-hooks= instead of =run-mode-hooks= in its control buffer, so
 =meow-global-mode= never sees it.  We manually enable meow in motion state
