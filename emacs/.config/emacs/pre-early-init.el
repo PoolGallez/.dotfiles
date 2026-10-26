@@ -3,7 +3,9 @@
 (setq minimal-emacs-gc-cons-threshold (* 2 1000 1000))
 
 (when (eq system-type 'android)
-  (setq minimal-emacs-ui-features '(menu-bar tool-bar context-menu dialogs)))
+  (setq minimal-emacs-ui-features '(menu-bar tool-bar context-menu dialogs))
+  (setq tool-bar-position 'bottom)
+  (push '(tool-bar-position . bottom) default-frame-alist))
 
 (when (eq system-type 'android)
   ;; No file-directory-p guard: it returned nil this early on the phone even

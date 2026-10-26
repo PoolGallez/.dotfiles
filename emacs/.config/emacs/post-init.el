@@ -54,7 +54,8 @@ for it instead of assuming, same pattern as the Org Roam sqlite check.")
   '(("Tasks.org"     . "#+title: Tasks\n\n* Tasks\n")
     ("Calendar.org"  . "#+title: Calendar\n\n")
     ("Birthdays.org" . "#+title: Birthdays\n\n")
-    ("Archive.org"   . "#+title: Archive\n\n"))
+    ("Archive.org"   . "#+title: Archive\n\n")
+    ("Health.org"    . "#+title: Health\n#+STARTUP: overview\n\n* Weight\nWeekly weigh-in (SPC o c w): same scale, in the morning, after the toilet, before eating\nor drinking, in underwear.  One row per weigh-in; sprint.el reads this table.\n\n| Date | kg | Note |\n|------+----+------|\n"))
   "Org files in `glz/org-directory' with their initial content.")
 
 (defun glz/org-file (name)
@@ -92,11 +93,102 @@ for it instead of assuming, same pattern as the Org Roam sqlite check.")
     (setenv "PATH" (concat clangd-bin ";" (getenv "PATH")))))
 
 (when (eq glz/platform 'android)
-  (when (fboundp 'modifier-bar-mode)
-    (modifier-bar-mode 1))
   (when (fboundp 'pixel-scroll-precision-mode)
     (pixel-scroll-precision-mode 1))
-  (set-face-attribute 'default nil :height 130))
+  (setq touch-screen-precision-scroll t
+        touch-screen-word-select t
+        touch-screen-extend-selection t
+        touch-screen-preview-select t)
+  (set-face-attribute 'default nil :height 130)
+
+  ;; ── Back ──────────────────────────────────────────────────────────────
+  (defun glz/android-back ()
+    "Leave the minibuffer, close a split window or go to the previous buffer.
+A capture is never dropped by accident: there it only reminds of the keys."
+    (interactive)
+    (cond ((active-minibuffer-window) (abort-recursive-edit))
+          ((bound-and-true-p org-capture-mode)
+           (message "Capture: ✓ (C-c C-c) saves, ✗ (C-c C-k) aborts"))
+          ((window-parameter nil 'quit-restore) (quit-window))
+          ((not (one-window-p t)) (delete-window))
+          (t (previous-buffer))))
+  (global-set-key [XF86Back] #'glz/android-back)
+  (define-key minibuffer-local-map [XF86Back] #'abort-recursive-edit)
+
+  ;; ── Tool bar ──────────────────────────────────────────────────────────
+  (defun glz/run-key (key)
+    "Run what KEY (a `kbd' string) is bound to in the current buffer."
+    (let ((cmd (key-binding (kbd key))))
+      (if (commandp cmd) (call-interactively cmd) (message "%s does nothing here" key))))
+  (defun glz/finish-key () "Finish: run C-c C-c." (interactive) (glz/run-key "C-c C-c"))
+  (defun glz/abort-key () "Abort: run C-c C-k." (interactive) (glz/run-key "C-c C-k"))
+
+  (defvar glz/tool-bar-map
+    (let ((map (make-sparse-keymap)))
+      (dolist (item `(("home" glz/dashboard "Dashboard")
+                      ("new" org-capture "Capture")
+                      ,@(when glz/enable-sprint '(("jump-to" glz/sprint-today "Today's training")))
+                      ("index" glz/agenda-dashboard "Agenda")
+                      sep
+                      ("left-arrow" glz/android-back "Back")
+                      ("save" save-buffer "Save")
+                      ("undo" undo "Undo")
+                      sep
+                      ("checked" glz/finish-key "Finish (C-c C-c)"
+                       :enable (commandp (key-binding (kbd "C-c C-c"))))
+                      ("cancel" glz/abort-key "Abort (C-c C-k)"
+                       :enable (commandp (key-binding (kbd "C-c C-k"))))
+                      ("search" execute-extended-command "M-x")))
+        (if (eq item 'sep)
+            (define-key-after map (vector (gensym "sep")) menu-bar-separator)
+          (pcase-let ((`(,icon ,cmd ,help . ,props) item))
+            (apply #'tool-bar-local-item icon cmd cmd map :help help props))))
+      map)
+    "Tool bar of the Android frames.")
+
+  ;; minimal-emacs runs `tool-bar-setup' after init, which would fill the
+  ;; default map with the desktop buttons; skip it and use ours instead.
+  ;; `tool-bar-mode' only sets the bar up when the default map is empty.
+  (advice-remove 'startup--load-user-init-file #'minimal-emacs--setup-toolbar)
+  (advice-remove 'tool-bar-setup #'ignore)
+  (setq-default tool-bar-map glz/tool-bar-map)
+
+  ;; ── Every buffer in the selected window ───────────────────────────────
+  (defvar glz/android-split-buffers
+    '("\\`\\*Completions\\*" "\\`\\*Org Select\\*" "\\`\\*Agenda Commands\\*"
+      "\\`\\*Org Links\\*" "\\`\\*Org Attach\\*" "\\`\\*Calendar\\*"
+      "\\`\\*Embark Actions\\*" "\\`\\*Warnings\\*" "\\`\\*Choices\\*")
+    "Buffers that stay temporary split windows on Android.")
+
+  (defun glz/android-full-window-p (buffer _action)
+    "Non-nil if BUFFER should replace the selected window's buffer.
+Hidden buffers (name starting with a space: which-key, transient, ...) and
+`glz/android-split-buffers' keep their usual small window."
+    (let ((name (if (stringp buffer) buffer (buffer-name buffer))))
+      (not (or (string-prefix-p " " name)
+               (seq-some (lambda (re) (string-match-p re name)) glz/android-split-buffers)))))
+
+  ;; `inhibit-same-window' nil wins over a caller asking for "another
+  ;; window" (pop-to-buffer t, switch-to-buffer-other-window, ...), because
+  ;; this entry's alist comes first.
+  (add-to-list 'display-buffer-alist
+               '(glz/android-full-window-p
+                 (display-buffer-reuse-window display-buffer-same-window)
+                 (inhibit-same-window . nil)))
+
+  ;; Org binds `display-buffer-alist' to nil around its own windows.
+  (setq org-agenda-window-setup 'current-window
+        org-agenda-restore-windows-after-quit t
+        org-src-window-setup 'current-window)
+  (add-hook 'org-capture-mode-hook #'delete-other-windows)
+
+  ;; ── Minibuffer and mode line ──────────────────────────────────────────
+  (with-eval-after-load 'vertico
+    (vertico-mouse-mode 1))
+  (setq doom-modeline-buffer-file-name-style 'buffer-name
+        doom-modeline-buffer-encoding nil
+        doom-modeline-minor-modes nil
+        doom-modeline-workspace-name nil))
 
 (defun glz/display-startup-time ()
   (message "Emacs loaded in %s with %d garbage collections."
@@ -297,7 +389,7 @@ for it instead of assuming, same pattern as the Org Roam sqlite check.")
   (defun glz/embark-copy-buffer-file-path (buffer)
     "Copy the full file path (or buffer name) of BUFFER to the kill ring."
     (interactive "bBuffer: ")
-    (when-let ((name (or (buffer-file-name (get-buffer buffer)) buffer)))
+    (when-let* ((name (or (buffer-file-name (get-buffer buffer)) buffer)))
       (kill-new name)
       (message "Copied: %s" name)))
 
@@ -526,6 +618,7 @@ for it instead of assuming, same pattern as the Org Roam sqlite check.")
 
   (meow-leader-define-key
    '("." . find-file)
+   '("d" . glz/dashboard)
    '("SPC" . project-find-file)
    '("g" . glz/git-map)
    '("b" . glz/buffer-map)
@@ -878,7 +971,44 @@ In every other state KEY keeps its current `org-mode-map' binding."
           ("d" "Task with deadline" entry (file+headline ,(glz/org-file "Tasks.org") "Tasks")
            ,(glz/org-task-template "DEADLINE: %^{Deadline}t"))
           ("b" "Birthday" entry (file ,(glz/org-file "Birthdays.org"))
-           "* %?\n  %^t\n %i")))
+           "* %?\n  %^t\n %i")
+          ("w" "Weight" table-line (file+headline ,(glz/org-file "Health.org") "Weight")
+           "| %<%Y-%m-%d> | %(glz/weight-read) | %^{Note (optional)} |"
+           :immediate-finish t)))
+
+  ;; ── Weekly weigh-in ──────────────────────────────────────────────────
+  ;; The "w" capture appends a row to the Weight table of Health.org.  The
+  ;; weight prompt repeats until the answer is a plausible weight (a typo would
+  ;; distort every trend; a comma decimal is fine), so a bad row is never
+  ;; inserted.  Then the repeating "Weigh in" task of Tasks.org (property
+  ;; :WEIGH_IN: t) is marked done, so it moves to next week by itself.
+  (defun glz/weight-read ()
+    "Read a body weight in kg (30–250, comma or point decimal); C-g cancels."
+    (let (kg)
+      (while (not kg)
+        (let ((a (replace-regexp-in-string "," "." (string-trim (read-string "Weight (kg): ")))))
+          (if (and (string-match-p "\\`[0-9]+\\(?:\\.[0-9]+\\)?\\'" a)
+                   (<= 30 (string-to-number a) 250))
+              (setq kg a)
+            (message "%S is not a weight in kg (30–250); try again" a)
+            (sit-for 1.5))))
+      kg))
+
+  (defun glz/weigh-in-done ()
+    "After a stored \"w\" capture, mark the due weekly weigh-in task done."
+    (when (and (equal (org-capture-get :key) "w") (not org-note-abort))
+      (with-current-buffer (find-file-noselect (glz/org-file "Tasks.org"))
+        (org-with-wide-buffer
+         (org-map-entries
+          (lambda ()
+            (let ((due (org-get-scheduled-time (point))))
+              (when (and (org-entry-is-todo-p) due
+                         (not (time-less-p (current-time) (time-subtract due (* 3 86400)))))
+                (org-todo 'done))))
+          "WEIGH_IN=\"t\"" 'file))
+        (save-buffer))))
+
+  (add-hook 'org-capture-after-finalize-hook #'glz/weigh-in-done)
 
   :custom
   (org-hide-leading-stars t)
@@ -891,10 +1021,12 @@ In every other state KEY keeps its current `org-mode-map' binding."
   ;; Refuse blind edits on folded text instead of silently corrupting structure.
   (org-catch-invisible-edits 'show-and-error))
 
-;; Org → Typst exporter (C-c C-e y …), used for Personal/CVTex/CV.org.
-;; The `typst' binary and the Roboto font come from the Nix org toolchain
-;; (nixos/modules/home/org-toolchain.nix); --font-path points typst at the
-;; profile's fonts so it doesn't depend on fontconfig being set up.
+(use-package org-bullets
+  :after org
+  :hook (org-mode . org-bullets-mode)
+  :custom
+  (org-bullets-bullet-list '("◉" "○" "●" "○" "●" "○" "●")))
+
 (use-package ox-typst
   :ensure t
   :after org
@@ -903,12 +1035,6 @@ In every other state KEY keeps its current `org-mode-map' binding."
    (concat "typst c --font-path "
            (shell-quote-argument (expand-file-name "~/.nix-profile/share/fonts"))
            " \"%s\"")))
-
-(use-package org-bullets
-  :after org
-  :hook (org-mode . org-bullets-mode)
-  :custom
-  (org-bullets-bullet-list '("◉" "○" "●" "○" "●" "○" "●")))
 
 (define-prefix-command 'glz/org-clock-map)
 (define-key glz/org-clock-map "i" #'org-clock-in)
@@ -1046,7 +1172,18 @@ In every other state KEY keeps its current `org-mode-map' binding."
   (with-eval-after-load 'org
     (let ((f (expand-file-name "sprint.el" user-emacs-directory)))
       (if (file-exists-p f) (load-file f)
-        (message "Warning: %s not found, skipping sprint" f)))))
+        (message "Warning: %s not found, skipping sprint" f))))
+
+  (defun glz/sprint-map-first-use ()
+    "Load org and sprint.el, then read the next key from the sprint map."
+    (interactive)
+    (require 'org)
+    (if (boundp 'sprint-map)
+        (set-transient-map sprint-map)
+      (message "sprint.el is not loaded (see *Messages*)")))
+
+  (unless (featurep 'sprint)
+    (define-key glz/org-map "S" #'glz/sprint-map-first-use)))
 
 (when glz/enable-latex-preview
   (use-package auctex
@@ -1229,6 +1366,253 @@ Frame creation is left to the emacsclient caller (-c), because
     (select-frame-set-input-focus frame)
     t))
 
+(defgroup glz/dashboard nil "Start page." :group 'convenience)
+
+(defcustom glz/dashboard-preload-sprint (eq glz/platform 'android)
+  "Load org and sprint.el when Emacs is idle after startup, for the Today line."
+  :type 'boolean)
+
+(defface glz/dashboard-banner '((t :inherit font-lock-keyword-face :weight bold)) "Dashboard banner.")
+(defface glz/dashboard-heading '((t :inherit font-lock-function-name-face :weight bold)) "Dashboard headings.")
+(defface glz/dashboard-key '((t :inherit font-lock-constant-face :weight bold)) "Dashboard entry keys.")
+(defface glz/dashboard-hint '((t :inherit shadow)) "Dashboard secondary text.")
+
+(defconst glz/dashboard-buffer-name "*dashboard*")
+
+(defconst glz/dashboard-banner
+  '(" ___ __  __   _   ___ ___ "
+    "| __|  \\/  | /_\\ / __/ __|"
+    "| _|| |\\/| |/ _ \\ (__\\__ \\"
+    "|___|_|  |_/_/ \\_\\___|___/"))
+
+;; Small commands for the entries, so they can be bound and shown by name.
+;; sprint.el is loaded together with org, so its commands do not exist
+;; before that: the glz/sprint-* wrappers load org first.
+(defun glz/sprint-run (cmd)
+  "Load org (and with it sprint.el), then run the sprint command CMD."
+  (require 'org)
+  (if (fboundp cmd) (call-interactively cmd)
+    (message "sprint.el is not loaded (see *Messages*)")))
+(defun glz/sprint-today () "Today's training." (interactive) (glz/sprint-run 'sprint-show-today))
+(defun glz/sprint-log () "Log today's session." (interactive) (glz/sprint-run 'sprint-log))
+(defun glz/sprint-agenda () "Sprint agenda." (interactive) (glz/sprint-run 'sprint-agenda))
+(defun glz/agenda-dashboard () "Agenda dashboard view." (interactive) (org-agenda nil "d"))
+(defun glz/capture-task () "Capture a task." (interactive) (org-capture nil "t"))
+(defun glz/capture-weight () "Capture a weigh-in." (interactive) (org-capture nil "w"))
+(defun glz/open-tasks () "Open Tasks.org." (interactive) (find-file (glz/org-file "Tasks.org")))
+(defun glz/open-config () "Open Config.org." (interactive)
+       (find-file (expand-file-name "Config.org" user-emacs-directory)))
+(defun glz/find-note () "Find an org-roam note, or browse the notes folder." (interactive)
+       (if glz/enable-org-roam (org-roam-node-find) (dired glz/org-notes-directory)))
+(defun glz/sprint-not-planned () "Record that today went differently." (interactive)
+       (require 'org) (org-capture nil "Sd"))
+
+(defun glz/keymap-menu (prompt keymap)
+  "Choose a command of KEYMAP in the minibuffer, by key and which-key label."
+  (let (cands)
+    (map-keymap
+     (lambda (event def)
+       ;; which-key labels are stored in the keymap as (LABEL . COMMAND).
+       (let* ((label (and (consp def) (stringp (car def)) (car def)))
+              (cmd (if label (cdr def) def)))
+         (when (commandp cmd)
+           (push (cons (format "%-2s %s" (single-key-description event)
+                               (or label (if (symbolp cmd) cmd "command")))
+                       cmd)
+                 cands))))
+     keymap)
+    (let ((choice (completing-read
+                   prompt
+                   (lambda (str pred action)
+                     (if (eq action 'metadata)
+                         '(metadata (display-sort-function . identity))
+                       (complete-with-action action cands str pred)))
+                   nil t)))
+      (call-interactively (cdr (assoc choice cands))))))
+
+(defun glz/sprint-menu ()
+  "Choose one of the sprint commands (`sprint-map') in the minibuffer."
+  (interactive)
+  (require 'org)
+  (if (boundp 'sprint-map)
+      (glz/keymap-menu "Sprint: " sprint-map)
+    (message "sprint.el is not loaded (see *Messages*)")))
+
+(defvar glz/dashboard-sections
+  `(,@(when glz/enable-sprint
+        '(("Sprint"
+           ("t" "Today's training" glz/sprint-today "SPC o S t")
+           ("l" "Log the session" glz/sprint-log "SPC o S L")
+           ("d" "Not as planned" glz/sprint-not-planned "SPC o S d")
+           ("S" "Sprint agenda" glz/sprint-agenda "SPC o S a")
+           ("s" "All sprint commands" glz/sprint-menu "SPC o S"))))
+    ("Capture"
+     ("c" "Capture…" org-capture "SPC o c")
+     ("n" "New task" glz/capture-task "SPC o c t")
+     ("w" "Weigh-in" glz/capture-weight "SPC o c w"))
+    ("Org"
+     ("a" "Agenda" glz/agenda-dashboard "SPC o a d")
+     ("T" "Tasks" glz/open-tasks nil)
+     ("N" "Find note" glz/find-note "SPC o r f"))
+    ("Emacs"
+     ("r" "Recent files" consult-recent-file nil)
+     ("p" "Projects" project-switch-project "SPC p p")
+     ("b" "Buffers" consult-buffer "SPC b b")
+     ,@(when glz/enable-magit '(("G" "Magit" magit-status "SPC g g")))
+     ("e" "Configuration" glz/open-config "SPC c")))
+  "Dashboard menu: (HEADING (KEY LABEL COMMAND LEADER-HINT)...)...")
+
+(defvar-keymap glz/dashboard-item-map
+  :doc "Mouse and touch on a dashboard entry."
+  "<mouse-1>" #'glz/dashboard-click
+  "<mouse-2>" #'glz/dashboard-click)
+
+(defun glz/dashboard-click (event)
+  "Run the dashboard entry clicked or tapped in EVENT."
+  (interactive "e")
+  (mouse-set-point event)
+  (glz/dashboard-run))
+
+(defun glz/dashboard-run ()
+  "Run the dashboard entry on the current line."
+  (interactive)
+  (if-let* ((cmd (get-text-property (line-beginning-position) 'glz-cmd)))
+      (call-interactively cmd)
+    (message "No entry on this line")))
+
+(defun glz/dashboard-next (&optional n)
+  "Move to the Nth next dashboard entry (backwards if N is negative)."
+  (interactive "p")
+  (let ((step (if (< (or n 1) 0) -1 1)))
+    (dotimes (_ (abs (or n 1)))
+      (when-let* ((pos (save-excursion
+                         (catch 'found
+                           (while (zerop (forward-line step))
+                             (when (get-text-property (point) 'glz-cmd)
+                               (throw 'found (point))))))))
+        (goto-char pos)))
+    (beginning-of-line)
+    (skip-chars-forward " ")))
+
+(defun glz/dashboard-prev (&optional n)
+  "Move to the Nth previous dashboard entry."
+  (interactive "p")
+  (glz/dashboard-next (- (or n 1))))
+
+(defun glz/dashboard--sprint-lines ()
+  "Today's phase and week, then the planned sessions (a hint before sprint.el is loaded)."
+  (cond ((not glz/enable-sprint) nil)
+        ((not (featurep 'sprint)) '("Training: t shows today's session"))
+        (t (condition-case err
+               (let ((ctx (sprint-context)))
+                 (cons (format "%s · week %s · %s" (sprint--phase-label ctx)
+                               (or (plist-get ctx :n) "-") (or (plist-get ctx :type) "-"))
+                       (split-string (sprint--planned-today) "\n *" t)))
+             (error (list (format "Training: %s" (error-message-string err))))))))
+
+(defvar-local glz/dashboard--width nil "Window width the dashboard was drawn for.")
+
+(defun glz/dashboard-render ()
+  "Draw the dashboard in the current buffer for its window's width."
+  (let* ((win (get-buffer-window (current-buffer) t))
+         (width (if win (window-body-width win) (frame-width)))
+         (wide (>= width 52))
+         (item-width (if wide 44 30))
+         (pad (make-string (max 0 (/ (- width item-width) 2)) ?\s))
+         (center (lambda (str face)
+                   (insert (make-string (max 0 (/ (- width (string-width str)) 2)) ?\s)
+                           (propertize str 'face face) "\n")))
+         (inhibit-read-only t))
+    (setq glz/dashboard--width width)
+    (erase-buffer)
+    (insert "\n")
+    (if (>= width 30)
+        (dolist (line glz/dashboard-banner) (funcall center line 'glz/dashboard-banner))
+      (funcall center "E M A C S" 'glz/dashboard-banner))
+    (insert "\n")
+    (funcall center (format-time-string "%A %e %B %Y") 'glz/dashboard-heading)
+    (dolist (line (glz/dashboard--sprint-lines))
+      (funcall center (truncate-string-to-width line (max 10 (- width 2)) nil nil "…")
+               'glz/dashboard-hint))
+    (dolist (section glz/dashboard-sections)
+      (insert "\n" pad (propertize (car section) 'face 'glz/dashboard-heading) "\n")
+      (pcase-dolist (`(,key ,label ,cmd ,hint) (cdr section))
+        (let ((right (if (and wide hint) hint "")))
+          (insert
+           (propertize
+            (concat pad
+                    (propertize key 'face 'glz/dashboard-key) "  "
+                    label
+                    (make-string (max 1 (- item-width 3 (string-width label) (string-width right))) ?\s)
+                    (propertize right 'face 'glz/dashboard-hint))
+            'glz-cmd cmd 'mouse-face 'highlight 'keymap glz/dashboard-item-map
+            'help-echo (format "%s (%s)" label cmd))
+           "\n"))))
+    (insert "\n")
+    (funcall center (format "%d packages · loaded in %s" (length package-activated-list)
+                            (emacs-init-time "%.2fs"))
+             'glz/dashboard-hint)
+    (goto-char (point-min))
+    (glz/dashboard-next 1)))
+
+(defun glz/dashboard-refresh (&rest _)
+  "Redraw the dashboard buffer if it exists."
+  (interactive)
+  (when-let* ((buf (get-buffer glz/dashboard-buffer-name)))
+    (with-current-buffer buf (glz/dashboard-render))))
+
+(defun glz/dashboard--on-resize (win)
+  "Redraw the dashboard when WIN, showing it, changed width."
+  (with-current-buffer (window-buffer win)
+    (unless (eql glz/dashboard--width (window-body-width win))
+      (glz/dashboard-render))))
+
+(defvar-keymap glz/dashboard-mode-map
+  :doc "Keys of the dashboard; one per entry, added from `glz/dashboard-sections'."
+  "RET" #'glz/dashboard-run
+  "TAB" #'glz/dashboard-next
+  "<backtab>" #'glz/dashboard-prev
+  "g" #'glz/dashboard-refresh
+  "q" #'quit-window)
+
+(define-derived-mode glz/dashboard-mode special-mode "Dashboard"
+  "Start page with the most used commands, see `glz/dashboard-sections'."
+  (setq-local truncate-lines t
+              cursor-in-non-selected-windows nil
+              revert-buffer-function (lambda (&rest _) (glz/dashboard-render)))
+  (add-hook 'window-size-change-functions #'glz/dashboard--on-resize nil t))
+
+(dolist (section glz/dashboard-sections)
+  (pcase-dolist (`(,key ,_ ,cmd ,_) (cdr section))
+    (keymap-set glz/dashboard-mode-map key cmd)))
+
+(with-eval-after-load 'meow
+  (add-to-list 'meow-mode-state-list '(glz/dashboard-mode . motion)))
+
+(defun glz/dashboard-buffer ()
+  "Return the dashboard buffer, drawing it the first time."
+  (or (get-buffer glz/dashboard-buffer-name)
+      (with-current-buffer (get-buffer-create glz/dashboard-buffer-name)
+        (glz/dashboard-mode)
+        (glz/dashboard-render)
+        (current-buffer))))
+
+(defun glz/dashboard ()
+  "Show the dashboard in the selected window."
+  (interactive)
+  (switch-to-buffer (glz/dashboard-buffer))
+  (glz/dashboard-render))
+
+(setq initial-buffer-choice #'glz/dashboard-buffer)
+
+(when (and glz/enable-sprint glz/dashboard-preload-sprint)
+  (add-hook 'emacs-startup-hook
+            (lambda ()
+              (run-with-idle-timer
+               1 nil (lambda ()
+                       (with-demoted-errors "Dashboard preload: %S" (require 'org))
+                       (glz/dashboard-refresh))))))
+
 (use-package dired
   :ensure nil
   :defer t
@@ -1377,6 +1761,7 @@ not immediately undone."
     "h" "help"
     "s" "eshell"
     "c" "open Config.org"
+    "d" "dashboard"
     "^" "outline / sort")
 
   (which-key-add-key-based-replacements

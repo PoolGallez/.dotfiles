@@ -37,6 +37,7 @@ which-key shows what is available after each prefix.
 |---------+------------------------+----------------------------------------------------------|
 | SPC .   | find-file              |                                                          |
 | SPC SPC | project-find-file      |                                                          |
+| SPC d   | dashboard              | start page: sprint, capture, agenda, notes, recent files |
 | SPC o   | org                    | agenda, capture, TODO states, links, clock, roam, sprint |
 | SPC g   | git                    | magit (status, commit, push, blame, ediff, smerge)       |
 | SPC b   | buffers                | prev/next/kill, copy file path/name                      |
@@ -49,7 +50,7 @@ which-key shows what is available after each prefix.
 | SPC ?   | cheatsheet             | Meow's key cheatsheet                                    |
 ** The PKDB knowledge base
 PKDB ("personal knowledge database") is a plain folder, =~/PKDB=, identical
-on every device.  Emacs creates missing folders and the four core org files
+on every device.  Emacs creates missing folders and the five core org files
 at startup, and never touches existing ones.
 
 | Path          | Purpose                                                          |
@@ -58,6 +59,7 @@ at startup, and never touches existing ones.
 | Calendar.org  | appointments (agenda)                                            |
 | Birthdays.org | birthdays (agenda)                                               |
 | Archive.org   | refile target for finished or cancelled items                    |
+| Health.org    | body measurements: the Weight table (weekly weigh-in)            |
 | Notes/        | long structured notes, one folder per course, chapters in files  |
 | roam/         | org-roam Zettelkasten (small linked notes, daily notes)          |
 | Athletics/    | TrainingDB.org (exercise database) and Sprint/ (training system) |
@@ -66,7 +68,12 @@ at startup, and never touches existing ones.
 *** Tasks and agenda
 Capture is the entry point: everything goes into =Tasks.org= and is
 organised afterwards.
-- =SPC o c= opens the capture menu: =t= task, =d= task with deadline, =b= birthday.
+- =SPC o c= opens the capture menu: =t= task, =d= task with deadline, =b= birthday,
+  =w= weight (kg and an optional note, appended as a dated row to the Weight
+  table of =Health.org=; checked to be 30–250 kg, a comma decimal is fine).
+  Storing a weight completes the repeating "Weigh in" task of =Tasks.org=
+  (property =:WEIGH_IN: t=), so the weekly reminder moves on by itself.  The
+  sprint report reads the table for the weight trend and strength per kg.
 - A task records where it was captured (=:ORIGIN:= link to the buffer you
   were in) and gets project tags, defaulting to the =project.el= project of
   that buffer, so tasks captured from a repo are filtered by that repo.
@@ -109,8 +116,9 @@ day-by-day schedule and the readiness rules are all derived from it.
 | sprint_config_YYYY.org   | every tunable parameter, as #+MACRO lines (season start, competition dates, phase lengths, readiness thresholds, previous-season bests) | you, by hand  |
 | sprint_plan_YYYY.org     | the plan template; reads the config through #+SETUPFILE, weekly tables per phase                                                        | you (rarely)  |
 | sprint_schedule_YYYY.org | the generated calendar: weeks, days, sessions                                                                                           | SPC o S g     |
-| sprint_log_YYYY.org      | what actually happened: sessions, tests, races                                                                                          | org-capture   |
-| ../TrainingDB.org        | exercise database, used by the validator                                                                                                | you           |
+| sprint_log_YYYY.org      | what actually happened: sessions (exercise by exercise), tests, races                                                                   | SPC o S L, org-capture |
+| sprint_adjust_YYYY.org   | proposals of the weekly review and manual overrides, with their fate (the tuning history)                                               | SPC o S W / o, you |
+| ../TrainingDB.org        | exercise database: categories, CNS, F-V bias, rule flags, harder variant (PROGRESSION)                                                  | you           |
 | GAPS.org                 | open issues and design notes of the system                                                                                              | you           |
 
 The season is split into 8 phases (Fundamental I, Fundamental II, indoor
@@ -127,33 +135,52 @@ highest =sprint_config_YYYY.org= found.
 | i   | sprint-today-info        | phase, week and planned session for today                          |
 | a   | sprint-agenda            | agenda restricted to the sprint schedule                           |
 | s   | capture: session         | log a training session                                             |
-| t   | capture: test            | log the testing battery                                            |
+| t   | sprint-show-today        | today's training in its own buffer, exercises as TODOs to tick   |
+| T   | capture: test            | log the testing battery                                            |
+| d   | capture: not as planned  | skipped or did something else today: reason, marks the plan        |
 | r   | capture: race            | log a race result                                                  |
 | y   | sprint-season-summary    | best values of the season as PREV_* macro lines                    |
 | l   | sprint-lock-week         | lock/unlock the week at point so regeneration keeps your edits     |
 | n   | sprint-new-season        | create next year's config, plan and log                            |
 | e   | sprint-export            | export plan, schedule and log to HTML and Markdown                 |
+| E   | sprint-export-schedule   | shareable visual HTML page: timeline, calendar, sessions          |
+| N   | sprint-wizard            | guided setup of a season (dates, maxima, form %, 100 m target, weekday pattern, phase lengths) |
+| L   | sprint-log               | log form of today's session: result line per exercise, [Save]   |
+| R   | sprint-report            | plan vs actual report (also the sprint-report dynamic block)       |
+| F   | sprint-fatigue           | fatigue estimate of the week                                       |
+| W   | sprint-review-week       | review a week, write proposals to sprint_adjust_YYYY.org            |
+| A   | sprint-apply             | apply the accepted proposals and rebuild unfinished weeks           |
+| x X | sprint-reroll-session / -week | redraw the exercises of the session / week at point          |
+| w   | sprint-swap-exercise     | replace the exercise at point by another of its category           |
+| o   | sprint-override          | change volume, loads, targets, deload or F-V focus for chosen weeks |
+| c   | sprint-export-csv        | one CSV row per planned exercise with its result                   |
 *** Workflow
 1. *Set up the season.*  Edit =sprint_config_YYYY.org= (season start must be a
    Monday, competition dates, targets).  Run =SPC o S v= and fix what the
    validator reports, then =SPC o S g= to generate the schedule.
 2. *Every day.*  =SPC o S i= tells you the phase and the planned session;
-   =SPC o S a= shows the sprint agenda.  After training, =SPC o S s= logs the
-   session: CMJ height, session RPE, soreness and duration are prompted, and
-   the planned session is inserted for reference.  Mark the schedule entry
-   =DONE= or =SKIPPED=.
+   =SPC o S a= shows the sprint agenda.  After training, =SPC o S L= logs the
+   session exercise by exercise (times, kg×reps, done/modified/skipped), then
+   CMJ height, session RPE, soreness and duration, and marks the schedule entry
+   =DONE= or =SKIPPED=.  =SPC o S s= is the quick session-level capture.
+   Weekly: =SPC o S R= report, =W= review (proposals), =A= apply.
 3. *Readiness is computed on save of the capture.*  The CMJ is compared to
    the baseline (percentage, =CMJ_PCT=), combined with the previous session's
    RPE and the soreness into Green / Yellow / Red with advice (Yellow: drop
    very high CNS work and cut plyometric contacts by 30%; Red: low-CNS day
    only).  If the CMJ is below the overreach limit for three sessions in a
    row, the entry is flagged =OVERREACH= and an unplanned deload week is advised.
-4. *Tests and races.*  =SPC o S t= and =SPC o S r= store results under the
-   =Testing Battery= and =Races= headings of the log.  A race with wind above
+4. *Tests and races.*  =SPC o S t= (or =SPC o S L= on a testing day) and
+   =SPC o S r= store results under the =Testing Battery= and =Races= headings
+   of the log; implausible test values are refused, since the tests set the
+   target times.  A race with wind above
    2.0 m/s is automatically marked =LEGAL: no= and ignored for personal bests.
 5. *Regenerating.*  Running =SPC o S g= again after changing the config keeps
-   all weeks before the current one untouched (so =DONE= / =SKIPPED= survive)
-   and rebuilds the current week onwards.
+   all weeks before the current one, locked weeks and hand-edited weeks
+   untouched and rebuilds the current week onwards; sessions already =DONE= /
+   =SKIPPED= in the current week stay as they are.  An open schedule buffer is
+   saved first and reverted afterwards.  Narrower changes: =SPC o S o=
+   (override weeks), =w= (swap an exercise), =x= / =X= (redraw).
 6. *End of season.*  =SPC o S y= shows the season's bests (10 m and 30 m
    times, 100 m PB, CMJ baseline, estimated 1RM from 3RM with Brzycki).
    =SPC o S n= then creates the next season's files: dates move forward 52
@@ -171,24 +198,40 @@ starting-point list of exercises, so you adjust instead of writing from scratch.
   CNS demand is too high for a Low day and any =sprint-unavailable-equipment=.
   An exercise named in the template ("Power Clean") is used as is.
 - *Variation.* Least-used exercises first, then the least recently used, a
-  different SUBCATEGORY inside the same slot, and never the same exercise twice
-  in a week.  The whole season is simulated in order, so reruns give the same
+  different SUBCATEGORY inside the same slot, never the same exercise twice in
+  a week, and no drawn exercise more than =ROTATION_WEEKS= weeks in a row.
+  Late in a block an exercise gives way to its harder variant (=PROGRESSION=,
+  marked ↑).  The whole season is simulated in order, so reruns give the same
   result.
 - *Load.* Lifts with config entries (squat, trap bar DL, power clean, Nordic)
   get sets × reps @ % and kg (from =PREV_*_1RM=).  =LOAD_START= → =LOAD_END=
   is interpolated over the loading weeks of the sub-phase (or phase); a
   deload week halves the sets.  Volume targets (acceleration m, max-velocity m,
   speed-endurance m, plyo contacts) are listed per session, halved on deload.
-- *Editing.* Edit the generated lines freely, then press =SPC o S l= on that
-  week: it gets =:LOCKED: yes= and regeneration leaves it alone (past weeks are
-  kept anyway).  Unlocked current/future weeks are rebuilt.
-- Not covered: the injury/spacing rules (48 h between max-velocity days, ...)
-  and the F-V bias are not applied to the selection.  Volume targets are
-  constant inside a sub-phase.
+- *Editing.* Edit the generated lines freely: a week whose exercise lines
+  differ from what was generated (=:GEN_HASH:=) gets =:LOCKED: yes= on the next
+  regeneration and is kept; =SPC o S l= toggles the lock (=no= rebuilds it).
+  =SPC o S w= swaps one exercise, =x= / =X= redraw a session / week.
+- *Separate venues.* With =SPLIT_VENUES yes= no session mixes track and gym:
+  the strength of the plan's sprint days moves to the gym days of the weekday
+  pattern (=Gym: …= sessions, tagged =:gym:=), and equipment-bound exercises
+  only go where the equipment is.
+- *Rules.* The spacing and injury rules (48 h between max-velocity days, ...)
+  and the F-V emphasis steer the selection; what cannot be avoided is listed as
+  WARNING lines at the top of the schedule.  Volume targets are constant inside
+  a sub-phase unless an override scales them.
+- Full user guide: =~/PKDB/Athletics/Sprint/README.org=.
 *** Using it from the phone
 =glz/enable-sprint= is on for Android too: the same captures work on the
 phone, so you can log a session right after training.  Syncthing then
 propagates the log to the other devices (see "Syncing PKDB").
+
+On the phone everything starts from the *dashboard* (the first buffer, or the
+home button of the tool bar): tap /Today's training/ to see the session with
+its exercises as TODOs, /Log the session/ for the exercise-by-exercise form,
+/Not as planned/ when the day went differently, and /All sprint commands/ for
+the rest of the =SPC o S= map as a tappable list.  The ✓ / ✗ buttons of the
+tool bar finish or abort the capture or log form (=C-c C-c= / =C-c C-k=).
 ** Git, projects and the rest
 - *Magit* (=SPC g g=) is the git client; =project.el= is advised so every
   project gets its own *perspective* (workspace with its own buffers),
@@ -198,7 +241,9 @@ propagates the log to the other devices (see "Syncing PKDB").
   minibuffer; Corfu in buffers; eglot + clangd for C/C++.
 - *Platform-specific modes*: Testfall, Anforderungen and CANAPE PAR (work
   tooling, Windows only), Nix mode (Linux).
-- *Android*: touch-friendly UI (menu bar, modifier bar, larger font) and
+- *Android*: one bottom tool bar (dashboard, capture, training, agenda,
+  back, save, undo, finish/abort, M-x), full-screen buffers, touch selection
+  and scrolling, larger font (see Post-Init → Android touch ergonomics), and
   Termux binaries on the =PATH= (needs the shared-UID setup described in
   Pre-Early-Init).
 ** Syncing PKDB
@@ -227,9 +272,17 @@ make commands discoverable without memorizing keybindings, so re-enable
 them for Android only.  This must run in pre-early-init.el: it sets
 =minimal-emacs-ui-features= before early-init.el reads it, and =glz/platform=
 (defined later, in post-init.el) doesn't exist yet at this point in startup.
+
+The tool bar goes to the *bottom* of the frame, where the thumb is (the same
+choice most Emacs-on-Android setups make).  Putting it in
+=default-frame-alist= here, before the first frame exists, avoids a
+redraw that =customize-set-variable= would cost later.  Its buttons are
+defined in Post-Init → Android touch ergonomics.
 #+begin_src emacs-lisp
 (when (eq system-type 'android)
-  (setq minimal-emacs-ui-features '(menu-bar tool-bar context-menu dialogs)))
+  (setq minimal-emacs-ui-features '(menu-bar tool-bar context-menu dialogs))
+  (setq tool-bar-position 'bottom)
+  (push '(tool-bar-position . bottom) default-frame-alist))
 #+end_src
 ** Termux binaries on PATH
 Lets Emacs shell out to whatever's installed in Termux (git, ripgrep,
@@ -381,6 +434,7 @@ Personal knowledge base layout (same on every platform, relative to
 | Calendar.org      | Calendar (agenda)                                                       |
 | Birthdays.org     | Birthdays (agenda)                                                      |
 | Archive.org       | Refile target for completed/cancelled items                             |
+| Health.org        | Body measurements: Weight table (capture =w=, read by sprint.el)        |
 | Notes/            | Long, structured notes                                                  |
 | roam/             | Org-roam Zettelkasten                                                   |
 | Athletics/Sprint/ | Sprint training system (config, plan, log, schedule; code in sprint.el) |
@@ -409,7 +463,8 @@ their content comes from the sync tool.
   '(("Tasks.org"     . "#+title: Tasks\n\n* Tasks\n")
     ("Calendar.org"  . "#+title: Calendar\n\n")
     ("Birthdays.org" . "#+title: Birthdays\n\n")
-    ("Archive.org"   . "#+title: Archive\n\n"))
+    ("Archive.org"   . "#+title: Archive\n\n")
+    ("Health.org"    . "#+title: Health\n#+STARTUP: overview\n\n* Weight\nWeekly weigh-in (SPC o c w): same scale, in the morning, after the toilet, before eating\nor drinking, in underwear.  One row per weigh-in; sprint.el reads this table.\n\n| Date | kg | Note |\n|------+----+------|\n"))
   "Org files in `glz/org-directory' with their initial content.")
 
 (defun glz/org-file (name)
@@ -448,37 +503,160 @@ their content comes from the sync tool.
 #+end_src
 
 *** Android touch ergonomics
-A phone screen has no physical Ctrl/Meta/Esc keys, and Meow's leader (=SPC=)
-covers most everyday commands without needing them — but a few things (org
-tables, capture's =C-c C-c= to finish, isearch) still expect a real
-modifier. =modifier-bar-mode= is Emacs's own built-in answer: it adds a
-small second tool bar with Ctrl/Meta/Shift/etc buttons that modify the next
-keypress and pop the on-screen keyboard up (built into Emacs 30+, no extra
-app). It piggybacks on the tool bar already re-enabled for Android above.
+The phone setup follows what most Emacs-on-Android configurations converge
+on: one keyboard that has the modifiers, one thumb-reachable tool bar with
+the few commands a phone session needs, and every buffer taking the whole
+screen instead of splitting a portrait display in two.
 
-If you type enough to want persistent modifier keys instead of tapping a
-button each time, /Hacker's Keyboard/ (F-Droid/Play Store) is the
-long-standing recommendation in the Emacs-on-Android community — it has a
-dedicated Ctrl/Alt/Esc/Tab row, at the cost of no glide typing. For a
-Bluetooth/USB keyboard, /External Keyboard Helper/ fixes up modifier keys
-Android otherwise mishandles.
+*Modifiers come from the keyboard.*  Unexpected Keyboard already has
+Ctrl/Alt/Esc/Tab keys, so Emacs's own =modifier-bar-mode= (a second tool bar
+with the same buttons) is not used: it would only take screen space twice.
+For a Bluetooth/USB keyboard, /External Keyboard Helper/ fixes up modifier
+keys Android otherwise mishandles.
 
-Also: =pixel-scroll-precision-mode= makes touch-drag scrolling track your
-finger instead of jumping by whole lines, and the default face size is
-bumped up ~15% — desktop-sized text reads small on a phone screen. This
-scales whatever font the Android build already picked rather than naming
-one, since font availability there isn't something to guess at from a
-desktop checkout; fine-tune further on-device with the toggle map's
-=text-scale-adjust= binding (SPC t, then the equals key, then =+=/=-=/=0=).
+*One tool bar, at the bottom* (placed there in Pre-Early-Init).  The default
+desktop tool bar (new file, open, cut, copy, paste, ...) is replaced by:
+
+| Icon        | Action                                                          |
+|-------------+-----------------------------------------------------------------|
+| home        | dashboard                                                       |
+| new         | org-capture                                                     |
+| jump-to     | today's training (sprint)                                       |
+| index       | agenda dashboard                                                |
+| left-arrow  | back: leave the minibuffer, close a split, or previous buffer   |
+| save / undo | save buffer / undo                                              |
+| checked     | finish: what =C-c C-c= does here (capture, log form, ...)       |
+| cancel      | abort: what =C-c C-k= does here                                 |
+| search      | =M-x=                                                           |
+
+The finish/abort buttons are greyed out where those keys do nothing.  The
+built-in tool bar is never built at all (=tool-bar-setup= is skipped), which
+also saves a little startup time.  The Android *Back* key does the same as
+the back button.
+
+*Full-screen buffers.*  On a desktop, help, reports and forms pop up next to
+the buffer you are in; on a phone that halves an already small screen.  On
+Android every buffer is shown in the selected window instead, except small
+helpers (completion list, capture/agenda menus, calendar, which-key,
+transient, warnings), which stay temporary splits.  Org manages a few windows
+itself, outside =display-buffer-alist=, so they are set separately: the
+agenda and source-block editing reuse the current window, and the capture
+buffer takes the whole frame (the previous layout comes back when the
+capture is finished).  =q= / back returns to the previous buffer.
+
+*Touch.*  =touch-screen-precision-scroll= and =pixel-scroll-precision-mode=
+make dragging track the finger instead of jumping by lines; a long press
+selects a word, which can then be extended by dragging
+(=touch-screen-word-select=, =touch-screen-extend-selection=), with a preview
+of the text under the finger.  Minibuffer candidates (Vertico) can be tapped
+(=vertico-mouse-mode=).  The mode line drops the encoding and minor modes and
+shows only the buffer name, so the information that matters fits a portrait
+screen.  The default face is bumped up ~15% (fine-tune with =SPC t ==, then
+=+=/=-=/=0=).
 #+begin_src emacs-lisp
 (when (eq glz/platform 'android)
-  (when (fboundp 'modifier-bar-mode)
-    (modifier-bar-mode 1))
   (when (fboundp 'pixel-scroll-precision-mode)
     (pixel-scroll-precision-mode 1))
+<<<<<<< HEAD
   (set-face-attribute 'default nil :height 130)
     (setq default-directory "/data/data/com.termux/files/home/") ; Point by default to the termux home to get the syncthing stuff synched
   (setq overriding-text-conversion-style nil))
+=======
+  (setq touch-screen-precision-scroll t
+        touch-screen-word-select t
+        touch-screen-extend-selection t
+        touch-screen-preview-select t)
+  (set-face-attribute 'default nil :height 130)
+
+  ;; ── Back ──────────────────────────────────────────────────────────────
+  (defun glz/android-back ()
+    "Leave the minibuffer, close a split window or go to the previous buffer.
+A capture is never dropped by accident: there it only reminds of the keys."
+    (interactive)
+    (cond ((active-minibuffer-window) (abort-recursive-edit))
+          ((bound-and-true-p org-capture-mode)
+           (message "Capture: ✓ (C-c C-c) saves, ✗ (C-c C-k) aborts"))
+          ((window-parameter nil 'quit-restore) (quit-window))
+          ((not (one-window-p t)) (delete-window))
+          (t (previous-buffer))))
+  (global-set-key [XF86Back] #'glz/android-back)
+  (define-key minibuffer-local-map [XF86Back] #'abort-recursive-edit)
+
+  ;; ── Tool bar ──────────────────────────────────────────────────────────
+  (defun glz/run-key (key)
+    "Run what KEY (a `kbd' string) is bound to in the current buffer."
+    (let ((cmd (key-binding (kbd key))))
+      (if (commandp cmd) (call-interactively cmd) (message "%s does nothing here" key))))
+  (defun glz/finish-key () "Finish: run C-c C-c." (interactive) (glz/run-key "C-c C-c"))
+  (defun glz/abort-key () "Abort: run C-c C-k." (interactive) (glz/run-key "C-c C-k"))
+
+  (defvar glz/tool-bar-map
+    (let ((map (make-sparse-keymap)))
+      (dolist (item `(("home" glz/dashboard "Dashboard")
+                      ("new" org-capture "Capture")
+                      ,@(when glz/enable-sprint '(("jump-to" glz/sprint-today "Today's training")))
+                      ("index" glz/agenda-dashboard "Agenda")
+                      sep
+                      ("left-arrow" glz/android-back "Back")
+                      ("save" save-buffer "Save")
+                      ("undo" undo "Undo")
+                      sep
+                      ("checked" glz/finish-key "Finish (C-c C-c)"
+                       :enable (commandp (key-binding (kbd "C-c C-c"))))
+                      ("cancel" glz/abort-key "Abort (C-c C-k)"
+                       :enable (commandp (key-binding (kbd "C-c C-k"))))
+                      ("search" execute-extended-command "M-x")))
+        (if (eq item 'sep)
+            (define-key-after map (vector (gensym "sep")) menu-bar-separator)
+          (pcase-let ((`(,icon ,cmd ,help . ,props) item))
+            (apply #'tool-bar-local-item icon cmd cmd map :help help props))))
+      map)
+    "Tool bar of the Android frames.")
+
+  ;; minimal-emacs runs `tool-bar-setup' after init, which would fill the
+  ;; default map with the desktop buttons; skip it and use ours instead.
+  ;; `tool-bar-mode' only sets the bar up when the default map is empty.
+  (advice-remove 'startup--load-user-init-file #'minimal-emacs--setup-toolbar)
+  (advice-remove 'tool-bar-setup #'ignore)
+  (setq-default tool-bar-map glz/tool-bar-map)
+
+  ;; ── Every buffer in the selected window ───────────────────────────────
+  (defvar glz/android-split-buffers
+    '("\\`\\*Completions\\*" "\\`\\*Org Select\\*" "\\`\\*Agenda Commands\\*"
+      "\\`\\*Org Links\\*" "\\`\\*Org Attach\\*" "\\`\\*Calendar\\*"
+      "\\`\\*Embark Actions\\*" "\\`\\*Warnings\\*" "\\`\\*Choices\\*")
+    "Buffers that stay temporary split windows on Android.")
+
+  (defun glz/android-full-window-p (buffer _action)
+    "Non-nil if BUFFER should replace the selected window's buffer.
+Hidden buffers (name starting with a space: which-key, transient, ...) and
+`glz/android-split-buffers' keep their usual small window."
+    (let ((name (if (stringp buffer) buffer (buffer-name buffer))))
+      (not (or (string-prefix-p " " name)
+               (seq-some (lambda (re) (string-match-p re name)) glz/android-split-buffers)))))
+
+  ;; `inhibit-same-window' nil wins over a caller asking for "another
+  ;; window" (pop-to-buffer t, switch-to-buffer-other-window, ...), because
+  ;; this entry's alist comes first.
+  (add-to-list 'display-buffer-alist
+               '(glz/android-full-window-p
+                 (display-buffer-reuse-window display-buffer-same-window)
+                 (inhibit-same-window . nil)))
+
+  ;; Org binds `display-buffer-alist' to nil around its own windows.
+  (setq org-agenda-window-setup 'current-window
+        org-agenda-restore-windows-after-quit t
+        org-src-window-setup 'current-window)
+  (add-hook 'org-capture-mode-hook #'delete-other-windows)
+
+  ;; ── Minibuffer and mode line ──────────────────────────────────────────
+  (with-eval-after-load 'vertico
+    (vertico-mouse-mode 1))
+  (setq doom-modeline-buffer-file-name-style 'buffer-name
+        doom-modeline-buffer-encoding nil
+        doom-modeline-minor-modes nil
+        doom-modeline-workspace-name nil))
+>>>>>>> 2bb03e5 (Improved of the sprint system + android usability)
 #+end_src
 
 ** Startup performance display
@@ -741,7 +919,7 @@ the =.el= source is used — the macro then expands correctly at load time.
   (defun glz/embark-copy-buffer-file-path (buffer)
     "Copy the full file path (or buffer name) of BUFFER to the kill ring."
     (interactive "bBuffer: ")
-    (when-let ((name (or (buffer-file-name (get-buffer buffer)) buffer)))
+    (when-let* ((name (or (buffer-file-name (get-buffer buffer)) buffer)))
       (kill-new name)
       (message "Copied: %s" name)))
 
@@ -978,6 +1156,7 @@ evil-mc for multiple cursors.
 
   (meow-leader-define-key
    '("." . find-file)
+   '("d" . glz/dashboard)
    '("SPC" . project-find-file)
    '("g" . glz/git-map)
    '("b" . glz/buffer-map)
@@ -1341,7 +1520,44 @@ In every other state KEY keeps its current `org-mode-map' binding."
           ("d" "Task with deadline" entry (file+headline ,(glz/org-file "Tasks.org") "Tasks")
            ,(glz/org-task-template "DEADLINE: %^{Deadline}t"))
           ("b" "Birthday" entry (file ,(glz/org-file "Birthdays.org"))
-           "* %?\n  %^t\n %i")))
+           "* %?\n  %^t\n %i")
+          ("w" "Weight" table-line (file+headline ,(glz/org-file "Health.org") "Weight")
+           "| %<%Y-%m-%d> | %(glz/weight-read) | %^{Note (optional)} |"
+           :immediate-finish t)))
+
+  ;; ── Weekly weigh-in ──────────────────────────────────────────────────
+  ;; The "w" capture appends a row to the Weight table of Health.org.  The
+  ;; weight prompt repeats until the answer is a plausible weight (a typo would
+  ;; distort every trend; a comma decimal is fine), so a bad row is never
+  ;; inserted.  Then the repeating "Weigh in" task of Tasks.org (property
+  ;; :WEIGH_IN: t) is marked done, so it moves to next week by itself.
+  (defun glz/weight-read ()
+    "Read a body weight in kg (30–250, comma or point decimal); C-g cancels."
+    (let (kg)
+      (while (not kg)
+        (let ((a (replace-regexp-in-string "," "." (string-trim (read-string "Weight (kg): ")))))
+          (if (and (string-match-p "\\`[0-9]+\\(?:\\.[0-9]+\\)?\\'" a)
+                   (<= 30 (string-to-number a) 250))
+              (setq kg a)
+            (message "%S is not a weight in kg (30–250); try again" a)
+            (sit-for 1.5))))
+      kg))
+
+  (defun glz/weigh-in-done ()
+    "After a stored \"w\" capture, mark the due weekly weigh-in task done."
+    (when (and (equal (org-capture-get :key) "w") (not org-note-abort))
+      (with-current-buffer (find-file-noselect (glz/org-file "Tasks.org"))
+        (org-with-wide-buffer
+         (org-map-entries
+          (lambda ()
+            (let ((due (org-get-scheduled-time (point))))
+              (when (and (org-entry-is-todo-p) due
+                         (not (time-less-p (current-time) (time-subtract due (* 3 86400)))))
+                (org-todo 'done))))
+          "WEIGH_IN=\"t\"" 'file))
+        (save-buffer))))
+
+  (add-hook 'org-capture-after-finalize-hook #'glz/weigh-in-done)
 
   :custom
   (org-hide-leading-stars t)
@@ -1359,6 +1575,25 @@ In every other state KEY keeps its current `org-mode-map' binding."
   :hook (org-mode . org-bullets-mode)
   :custom
   (org-bullets-bullet-list '("◉" "○" "●" "○" "●" "○" "●")))
+#+end_src
+**** Typst export (ox-typst)
+Adds a Typst backend to the export dispatcher: =C-c C-e y p= exports the
+current org file to PDF (=y o= exports and opens it, =y f= writes only the
+=.typ= file).  Used for the CV in =PKDB/Personal/CVTex/CV.org=, whose whole
+layout is a =#+BEGIN_EXPORT typst= block at the top of that file, so nothing
+CV-specific lives here.  The =typst= binary and the Roboto font the CV uses
+come from the Nix org toolchain (=nixos/modules/home/org-toolchain.nix=).
+=--font-path= points typst straight at the profile's fonts, so Roboto is
+found without depending on fontconfig being set up.
+#+begin_src emacs-lisp
+(use-package ox-typst
+  :ensure t
+  :after org
+  :custom
+  (org-typst-process
+   (concat "typst c --font-path "
+           (shell-quote-argument (expand-file-name "~/.nix-profile/share/fonts"))
+           " \"%s\"")))
 #+end_src
 **** Keybindings
 Inside org buffers, in Meow normal state:
@@ -1565,12 +1800,27 @@ captures under =SPC o c S= (=Ss= session, =St= test, =Sr= race) and the
 the keybindings above so the =SPC o S= key can be installed.  A missing file
 is skipped with a warning.  Switched by =glz/enable-sprint= in the Control Panel (all platforms by default, Android included).  Kept out of compile-angel like the other personal
 modes.
+=sprint.el= needs org, so it is loaded when org is.  Until then =SPC o S= is a
+small loader: it loads org (and with it =sprint.el=, which then binds the real
+map) and hands the next key to that map, so =SPC o S t= works from any buffer
+on the first try without loading org at startup.
 #+begin_src emacs-lisp
 (when glz/enable-sprint
   (with-eval-after-load 'org
     (let ((f (expand-file-name "sprint.el" user-emacs-directory)))
       (if (file-exists-p f) (load-file f)
-        (message "Warning: %s not found, skipping sprint" f)))))
+        (message "Warning: %s not found, skipping sprint" f))))
+
+  (defun glz/sprint-map-first-use ()
+    "Load org and sprint.el, then read the next key from the sprint map."
+    (interactive)
+    (require 'org)
+    (if (boundp 'sprint-map)
+        (set-transient-map sprint-map)
+      (message "sprint.el is not loaded (see *Messages*)")))
+
+  (unless (featurep 'sprint)
+    (define-key glz/org-map "S" #'glz/sprint-map-first-use)))
 #+end_src
 **** AUCTeX-based LaTeX preview (org-auctex)
 Org's built-in LaTeX preview (=dvipng=, synchronous) recompiles the whole
@@ -1677,6 +1927,44 @@ build of Emacs, so this is skipped on Android like the other native-compile
                   (> pixel-w pixel-h) (< mm-w mm-h))
              (cons (/ (* 25.4 pixel-w) mm-h) (/ (* 25.4 pixel-h) mm-w))
            (funcall orig-fn)))))))
+#+end_src
+#+begin_src emacs-lisp
+;; Preview SVGs are rendered once, with the text scale at that moment baked
+;; into dvisvgm's --scale, so zooming afterwards leaves them at the old size.
+;; Re-render the existing previews (debounced) whenever the zoom changes.
+(when glz/enable-latex-preview
+  (defvar-local glz/latex-rescale-timer nil)
+
+  (defun glz/org-latex-rescale ()
+    "Regenerate this buffer's LaTeX previews at the current text scale."
+    (setq glz/latex-rescale-timer nil)
+    (when (and (derived-mode-p 'org-mode)
+               (seq-some (lambda (o) (overlay-get o 'preview-state))
+                         (overlays-in (point-min) (point-max))))
+      (org-auctex-preview-clearout-buffer)
+      (org-auctex-preview-buffer)))
+
+  (defun glz/org-latex-schedule-rescale ()
+    (when (derived-mode-p 'org-mode)
+      (when (timerp glz/latex-rescale-timer)
+        (cancel-timer glz/latex-rescale-timer))
+      (setq glz/latex-rescale-timer
+            (run-with-idle-timer 0.6 nil
+                                 (let ((buf (current-buffer)))
+                                   (lambda ()
+                                     (when (buffer-live-p buf)
+                                       (with-current-buffer buf
+                                         (glz/org-latex-rescale)))))))))
+
+  (add-hook 'text-scale-mode-hook #'glz/org-latex-schedule-rescale)
+
+  (defvar glz/latex-preview-scale-factor 1.3
+    "Extra multiplier on AUCTeX's computed preview scale; raise if equations look small.")
+
+  (with-eval-after-load 'preview
+    (advice-add 'preview-scale-from-face :filter-return
+                (lambda (fn)
+                  (lambda () (* glz/latex-preview-scale-factor (funcall fn)))))))
 #+end_src
 **** Visual fill column (centered, width-limited org buffers)
 #+begin_src emacs-lisp
@@ -1796,6 +2084,287 @@ Frame creation is left to the emacsclient caller (-c), because
   (when-let* ((frame (glz/main-frame)))
     (select-frame-set-input-focus frame)
     t))
+#+end_src
+*** Dashboard (start page)
+A Doom-style start page in about a hundred lines and no package: a banner,
+today's date and planned training, and a short menu of the things done most
+often.  It is the first buffer at startup and in every new =emacsclient -c=
+frame (popup frames run a command and are not affected), and comes back with
+=SPC d= or the home button of the Android tool bar.
+
+Building it loads nothing: org, sprint.el and consult are only loaded when
+an entry is used.  The "Today" line needs sprint.el; until org has been
+loaded it says so, unless =glz/dashboard-preload-sprint= is set (Android
+only, by default): then org and sprint.el are loaded one second after
+startup, once Emacs is idle, and the line fills in by itself.
+
+Every entry can be pressed with its key, with =RET=, or tapped.  The same
+keys work only in the dashboard; the right column shows the leader key that
+reaches the command from anywhere (hidden on narrow screens).
+
+| Key | Entry                     | Key | Entry                           |
+|-----+---------------------------+-----+---------------------------------|
+| t   | today's training          | a   | agenda dashboard                |
+| l   | log the session           | T   | Tasks.org                       |
+| d   | not as planned today      | N   | find a note (org-roam or Notes) |
+| S   | sprint agenda             | r   | recent files                    |
+| s   | all sprint commands       | p   | switch project                  |
+| c   | capture menu              | b   | buffers                         |
+| n   | new task                  | G   | magit status (if enabled)       |
+| w   | weigh-in                  | e   | this configuration              |
+
+=g= redraws, =q= buries the buffer, =TAB= / =S-TAB= jump between entries and
+=j= / =k= move as everywhere.  "All sprint commands" lists every command of
+the =SPC o S= map by name in the minibuffer — the way to reach them on a
+touch screen, where the keyboard is hidden in a read-only buffer like this
+one.  =glz/keymap-menu= does the same for any keymap.
+#+begin_src emacs-lisp
+(defgroup glz/dashboard nil "Start page." :group 'convenience)
+
+(defcustom glz/dashboard-preload-sprint (eq glz/platform 'android)
+  "Load org and sprint.el when Emacs is idle after startup, for the Today line."
+  :type 'boolean)
+
+(defface glz/dashboard-banner '((t :inherit font-lock-keyword-face :weight bold)) "Dashboard banner.")
+(defface glz/dashboard-heading '((t :inherit font-lock-function-name-face :weight bold)) "Dashboard headings.")
+(defface glz/dashboard-key '((t :inherit font-lock-constant-face :weight bold)) "Dashboard entry keys.")
+(defface glz/dashboard-hint '((t :inherit shadow)) "Dashboard secondary text.")
+
+(defconst glz/dashboard-buffer-name "*dashboard*")
+
+(defconst glz/dashboard-banner
+  '(" ___ __  __   _   ___ ___ "
+    "| __|  \\/  | /_\\ / __/ __|"
+    "| _|| |\\/| |/ _ \\ (__\\__ \\"
+    "|___|_|  |_/_/ \\_\\___|___/"))
+
+;; Small commands for the entries, so they can be bound and shown by name.
+;; sprint.el is loaded together with org, so its commands do not exist
+;; before that: the glz/sprint-* wrappers load org first.
+(defun glz/sprint-run (cmd)
+  "Load org (and with it sprint.el), then run the sprint command CMD."
+  (require 'org)
+  (if (fboundp cmd) (call-interactively cmd)
+    (message "sprint.el is not loaded (see *Messages*)")))
+(defun glz/sprint-today () "Today's training." (interactive) (glz/sprint-run 'sprint-show-today))
+(defun glz/sprint-log () "Log today's session." (interactive) (glz/sprint-run 'sprint-log))
+(defun glz/sprint-agenda () "Sprint agenda." (interactive) (glz/sprint-run 'sprint-agenda))
+(defun glz/agenda-dashboard () "Agenda dashboard view." (interactive) (org-agenda nil "d"))
+(defun glz/capture-task () "Capture a task." (interactive) (org-capture nil "t"))
+(defun glz/capture-weight () "Capture a weigh-in." (interactive) (org-capture nil "w"))
+(defun glz/open-tasks () "Open Tasks.org." (interactive) (find-file (glz/org-file "Tasks.org")))
+(defun glz/open-config () "Open Config.org." (interactive)
+       (find-file (expand-file-name "Config.org" user-emacs-directory)))
+(defun glz/find-note () "Find an org-roam note, or browse the notes folder." (interactive)
+       (if glz/enable-org-roam (org-roam-node-find) (dired glz/org-notes-directory)))
+(defun glz/sprint-not-planned () "Record that today went differently." (interactive)
+       (require 'org) (org-capture nil "Sd"))
+
+(defun glz/keymap-menu (prompt keymap)
+  "Choose a command of KEYMAP in the minibuffer, by key and which-key label."
+  (let (cands)
+    (map-keymap
+     (lambda (event def)
+       ;; which-key labels are stored in the keymap as (LABEL . COMMAND).
+       (let* ((label (and (consp def) (stringp (car def)) (car def)))
+              (cmd (if label (cdr def) def)))
+         (when (commandp cmd)
+           (push (cons (format "%-2s %s" (single-key-description event)
+                               (or label (if (symbolp cmd) cmd "command")))
+                       cmd)
+                 cands))))
+     keymap)
+    (let ((choice (completing-read
+                   prompt
+                   (lambda (str pred action)
+                     (if (eq action 'metadata)
+                         '(metadata (display-sort-function . identity))
+                       (complete-with-action action cands str pred)))
+                   nil t)))
+      (call-interactively (cdr (assoc choice cands))))))
+
+(defun glz/sprint-menu ()
+  "Choose one of the sprint commands (`sprint-map') in the minibuffer."
+  (interactive)
+  (require 'org)
+  (if (boundp 'sprint-map)
+      (glz/keymap-menu "Sprint: " sprint-map)
+    (message "sprint.el is not loaded (see *Messages*)")))
+
+(defvar glz/dashboard-sections
+  `(,@(when glz/enable-sprint
+        '(("Sprint"
+           ("t" "Today's training" glz/sprint-today "SPC o S t")
+           ("l" "Log the session" glz/sprint-log "SPC o S L")
+           ("d" "Not as planned" glz/sprint-not-planned "SPC o S d")
+           ("S" "Sprint agenda" glz/sprint-agenda "SPC o S a")
+           ("s" "All sprint commands" glz/sprint-menu "SPC o S"))))
+    ("Capture"
+     ("c" "Capture…" org-capture "SPC o c")
+     ("n" "New task" glz/capture-task "SPC o c t")
+     ("w" "Weigh-in" glz/capture-weight "SPC o c w"))
+    ("Org"
+     ("a" "Agenda" glz/agenda-dashboard "SPC o a d")
+     ("T" "Tasks" glz/open-tasks nil)
+     ("N" "Find note" glz/find-note "SPC o r f"))
+    ("Emacs"
+     ("r" "Recent files" consult-recent-file nil)
+     ("p" "Projects" project-switch-project "SPC p p")
+     ("b" "Buffers" consult-buffer "SPC b b")
+     ,@(when glz/enable-magit '(("G" "Magit" magit-status "SPC g g")))
+     ("e" "Configuration" glz/open-config "SPC c")))
+  "Dashboard menu: (HEADING (KEY LABEL COMMAND LEADER-HINT)...)...")
+
+(defvar-keymap glz/dashboard-item-map
+  :doc "Mouse and touch on a dashboard entry."
+  "<mouse-1>" #'glz/dashboard-click
+  "<mouse-2>" #'glz/dashboard-click)
+
+(defun glz/dashboard-click (event)
+  "Run the dashboard entry clicked or tapped in EVENT."
+  (interactive "e")
+  (mouse-set-point event)
+  (glz/dashboard-run))
+
+(defun glz/dashboard-run ()
+  "Run the dashboard entry on the current line."
+  (interactive)
+  (if-let* ((cmd (get-text-property (line-beginning-position) 'glz-cmd)))
+      (call-interactively cmd)
+    (message "No entry on this line")))
+
+(defun glz/dashboard-next (&optional n)
+  "Move to the Nth next dashboard entry (backwards if N is negative)."
+  (interactive "p")
+  (let ((step (if (< (or n 1) 0) -1 1)))
+    (dotimes (_ (abs (or n 1)))
+      (when-let* ((pos (save-excursion
+                         (catch 'found
+                           (while (zerop (forward-line step))
+                             (when (get-text-property (point) 'glz-cmd)
+                               (throw 'found (point))))))))
+        (goto-char pos)))
+    (beginning-of-line)
+    (skip-chars-forward " ")))
+
+(defun glz/dashboard-prev (&optional n)
+  "Move to the Nth previous dashboard entry."
+  (interactive "p")
+  (glz/dashboard-next (- (or n 1))))
+
+(defun glz/dashboard--sprint-lines ()
+  "Today's phase and week, then the planned sessions (a hint before sprint.el is loaded)."
+  (cond ((not glz/enable-sprint) nil)
+        ((not (featurep 'sprint)) '("Training: t shows today's session"))
+        (t (condition-case err
+               (let ((ctx (sprint-context)))
+                 (cons (format "%s · week %s · %s" (sprint--phase-label ctx)
+                               (or (plist-get ctx :n) "-") (or (plist-get ctx :type) "-"))
+                       (split-string (sprint--planned-today) "\n *" t)))
+             (error (list (format "Training: %s" (error-message-string err))))))))
+
+(defvar-local glz/dashboard--width nil "Window width the dashboard was drawn for.")
+
+(defun glz/dashboard-render ()
+  "Draw the dashboard in the current buffer for its window's width."
+  (let* ((win (get-buffer-window (current-buffer) t))
+         (width (if win (window-body-width win) (frame-width)))
+         (wide (>= width 52))
+         (item-width (if wide 44 30))
+         (pad (make-string (max 0 (/ (- width item-width) 2)) ?\s))
+         (center (lambda (str face)
+                   (insert (make-string (max 0 (/ (- width (string-width str)) 2)) ?\s)
+                           (propertize str 'face face) "\n")))
+         (inhibit-read-only t))
+    (setq glz/dashboard--width width)
+    (erase-buffer)
+    (insert "\n")
+    (if (>= width 30)
+        (dolist (line glz/dashboard-banner) (funcall center line 'glz/dashboard-banner))
+      (funcall center "E M A C S" 'glz/dashboard-banner))
+    (insert "\n")
+    (funcall center (format-time-string "%A %e %B %Y") 'glz/dashboard-heading)
+    (dolist (line (glz/dashboard--sprint-lines))
+      (funcall center (truncate-string-to-width line (max 10 (- width 2)) nil nil "…")
+               'glz/dashboard-hint))
+    (dolist (section glz/dashboard-sections)
+      (insert "\n" pad (propertize (car section) 'face 'glz/dashboard-heading) "\n")
+      (pcase-dolist (`(,key ,label ,cmd ,hint) (cdr section))
+        (let ((right (if (and wide hint) hint "")))
+          (insert
+           (propertize
+            (concat pad
+                    (propertize key 'face 'glz/dashboard-key) "  "
+                    label
+                    (make-string (max 1 (- item-width 3 (string-width label) (string-width right))) ?\s)
+                    (propertize right 'face 'glz/dashboard-hint))
+            'glz-cmd cmd 'mouse-face 'highlight 'keymap glz/dashboard-item-map
+            'help-echo (format "%s (%s)" label cmd))
+           "\n"))))
+    (insert "\n")
+    (funcall center (format "%d packages · loaded in %s" (length package-activated-list)
+                            (emacs-init-time "%.2fs"))
+             'glz/dashboard-hint)
+    (goto-char (point-min))
+    (glz/dashboard-next 1)))
+
+(defun glz/dashboard-refresh (&rest _)
+  "Redraw the dashboard buffer if it exists."
+  (interactive)
+  (when-let* ((buf (get-buffer glz/dashboard-buffer-name)))
+    (with-current-buffer buf (glz/dashboard-render))))
+
+(defun glz/dashboard--on-resize (win)
+  "Redraw the dashboard when WIN, showing it, changed width."
+  (with-current-buffer (window-buffer win)
+    (unless (eql glz/dashboard--width (window-body-width win))
+      (glz/dashboard-render))))
+
+(defvar-keymap glz/dashboard-mode-map
+  :doc "Keys of the dashboard; one per entry, added from `glz/dashboard-sections'."
+  "RET" #'glz/dashboard-run
+  "TAB" #'glz/dashboard-next
+  "<backtab>" #'glz/dashboard-prev
+  "g" #'glz/dashboard-refresh
+  "q" #'quit-window)
+
+(define-derived-mode glz/dashboard-mode special-mode "Dashboard"
+  "Start page with the most used commands, see `glz/dashboard-sections'."
+  (setq-local truncate-lines t
+              cursor-in-non-selected-windows nil
+              revert-buffer-function (lambda (&rest _) (glz/dashboard-render)))
+  (add-hook 'window-size-change-functions #'glz/dashboard--on-resize nil t))
+
+(dolist (section glz/dashboard-sections)
+  (pcase-dolist (`(,key ,_ ,cmd ,_) (cdr section))
+    (keymap-set glz/dashboard-mode-map key cmd)))
+
+(with-eval-after-load 'meow
+  (add-to-list 'meow-mode-state-list '(glz/dashboard-mode . motion)))
+
+(defun glz/dashboard-buffer ()
+  "Return the dashboard buffer, drawing it the first time."
+  (or (get-buffer glz/dashboard-buffer-name)
+      (with-current-buffer (get-buffer-create glz/dashboard-buffer-name)
+        (glz/dashboard-mode)
+        (glz/dashboard-render)
+        (current-buffer))))
+
+(defun glz/dashboard ()
+  "Show the dashboard in the selected window."
+  (interactive)
+  (switch-to-buffer (glz/dashboard-buffer))
+  (glz/dashboard-render))
+
+(setq initial-buffer-choice #'glz/dashboard-buffer)
+
+(when (and glz/enable-sprint glz/dashboard-preload-sprint)
+  (add-hook 'emacs-startup-hook
+            (lambda ()
+              (run-with-idle-timer
+               1 nil (lambda ()
+                       (with-demoted-errors "Dashboard preload: %S" (require 'org))
+                       (glz/dashboard-refresh))))))
 #+end_src
 *** Dired
 #+begin_src emacs-lisp
@@ -1960,6 +2529,7 @@ not immediately undone."
     "h" "help"
     "s" "eshell"
     "c" "open Config.org"
+    "d" "dashboard"
     "^" "outline / sort")
 
   (which-key-add-key-based-replacements

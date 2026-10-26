@@ -56,7 +56,7 @@
   users.users.pool = {
     isNormalUser = true;
     description = "Paolo Galletta";
-    extraGroups = [ "networkmanager" "wheel" ];
+    extraGroups = [ "networkmanager" "wheel" "input" ];
     packages = with pkgs; [
     #  thunderbird
     ];
