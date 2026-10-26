@@ -139,45 +139,15 @@ A capture is never dropped by accident: there it only reminds of the keys."
     (with-eval-after-load 'which-key
       (which-key-add-keymap-based-replacements glz/toggle-map "k" "keyboard")))
 
-  ;; Emacs ships no keyboard icon, so the keyboard button draws one: a
-  ;; monochrome XBM bitmap (supported by every build), # = ink.
-  (defun glz/xbm-icon (rows)
-    "Tool bar image drawn by ROWS, strings of equal length where # is ink."
-    (create-image (vconcat (mapcar (lambda (row) (apply #'bool-vector (mapcar (lambda (c) (eq c ?#)) row)))
-                                   rows))
-                  'xbm t :width (length (car rows)) :height (length rows)))
-
-  (defconst glz/keyboard-icon
-    (glz/xbm-icon '("........................"
-                    "........................"
-                    "........................"
-                    "........................"
-                    "........................"
-                    ".######################."
-                    ".#....................#."
-                    ".#.##.##.##.##.##.##..#."
-                    ".#.##.##.##.##.##.##..#."
-                    ".#....................#."
-                    ".#..##.##.##.##.##.##.#."
-                    ".#..##.##.##.##.##.##.#."
-                    ".#....................#."
-                    ".#.##..##########..##.#."
-                    ".#.##..##########..##.#."
-                    ".#....................#."
-                    ".######################."
-                    "........................"
-                    "........................"
-                    "........................"
-                    "........................"
-                    "........................"
-                    "........................"
-                    "........................")))
-
   (defconst glz/tool-bar-map
     (let ((map (make-sparse-keymap)))
       ;; Seven buttons, one row on a phone.  Training, agenda, notes, ... are
       ;; one tap away on the dashboard; undo is u, M-x is Alt+x or SPC m x.
+      ;; The keyboard sits next to home, so it is never the one cut off when
+      ;; the bar is wider than the screen.  Emacs has no keyboard icon:
+      ;; "spell" (ABC with a tick) is the closest built-in one.
       (dolist (item '(("home" glz/dashboard "Dashboard")
+                      ("spell" glz/show-keyboard "Show the keyboard")
                       ("new" org-capture "Capture")
                       ("left-arrow" glz/android-back "Back")
                       ("save" save-buffer "Save")
@@ -187,18 +157,16 @@ A capture is never dropped by accident: there it only reminds of the keys."
                        :enable (commandp (key-binding (kbd "C-c C-k"))))))
         (pcase-let ((`(,icon ,cmd ,help . ,props) item))
           (apply #'tool-bar-local-item icon cmd cmd map :help help props)))
-      ;; Last, where it is easy to find: the keyboard.
-      (define-key-after map [glz/show-keyboard]
-        `(menu-item "Keyboard" glz/show-keyboard :help "Show the keyboard"
-                    :image ,glz/keyboard-icon))
       map)
     "Tool bar of the Android frames.")
 
-  ;; minimal-emacs runs `tool-bar-setup' after init, which would fill the
-  ;; default map with the desktop buttons; skip it and use ours instead.
-  ;; `tool-bar-mode' only sets the bar up when the default map is empty.
-  (advice-remove 'startup--load-user-init-file #'minimal-emacs--setup-toolbar)
-  (advice-remove 'tool-bar-setup #'ignore)
+  ;; minimal-emacs runs `minimal-emacs--setup-toolbar' right after init.el
+  ;; (which loads this file) and it calls `tool-bar-setup', which would add
+  ;; the desktop buttons (new, open, cut, copy, paste, isearch, ...) to the
+  ;; default map, i.e. to ours.  Removing that hook from here is too late:
+  ;; it is already running.  Replacing the function works, because the hook
+  ;; calls it by name afterwards.
+  (advice-add 'minimal-emacs--setup-toolbar :override #'ignore)
   (setq-default tool-bar-map glz/tool-bar-map)
 
   ;; ── Every buffer in the selected window ───────────────────────────────
