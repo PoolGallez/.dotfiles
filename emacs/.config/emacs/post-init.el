@@ -810,7 +810,9 @@ Hidden buffers (name starting with a space: which-key, transient, ...) and
   :mode ("\\.org\\'" . org-mode)
   :hook (org-mode . glz/org-mode-setup)
   :config
-  (setq org-ellipsis " ▾"
+  ;; The phone's font has no ▾ (it showed as stray symbols): » there, which
+  ;; every font has.
+  (setq org-ellipsis (if (eq glz/platform 'android) " »" " ▾")
         org-hide-emphasis-markers t)
 
   ;; ── Structure editing (M-hjkl, all states) ───────────────────────────
@@ -1121,6 +1123,9 @@ In every other state KEY keeps its current `org-mode-map' binding."
 (define-key glz/org-map "!" #'org-time-stamp-inactive)
 (define-key glz/org-map "l" #'org-insert-link)
 (define-key glz/org-map "y" #'org-store-link)
+;; Paste an image from the clipboard (e.g. a phone screenshot): saved as an
+;; attachment next to the file (data/), with a link at point.
+(define-key glz/org-map "i" #'yank-media)
 (define-key glz/org-map "o" #'org-open-at-point)
 (define-key glz/org-map "x" #'org-toggle-checkbox)
 (define-key glz/org-map "h" #'org-insert-heading-respect-content)
@@ -1201,6 +1206,7 @@ In every other state KEY keeps its current `org-mode-map' binding."
     "s" "schedule"          "d" "deadline"
     "." "timestamp"         "!" "inactive timestamp"
     "l" "insert link"       "y" "store link"
+    "i" "paste image"
     "o" "open at point"     "x" "toggle checkbox"
     "h" "new heading"       "*" "toggle heading"
     "-" "toggle list item"  "w" "refile"

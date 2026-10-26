@@ -1366,7 +1366,9 @@ features that are unnecessary for a read-only reference document.
   :mode ("\\.org\\'" . org-mode)
   :hook (org-mode . glz/org-mode-setup)
   :config
-  (setq org-ellipsis " ▾"
+  ;; The phone's font has no ▾ (it showed as stray symbols): » there, which
+  ;; every font has.
+  (setq org-ellipsis (if (eq glz/platform 'android) " »" " ▾")
         org-hide-emphasis-markers t)
 
   ;; ── Structure editing (M-hjkl, all states) ───────────────────────────
@@ -1692,6 +1694,7 @@ buffer).  Several keys mirror org's own =C-c= keys (=.=, =!=, =-=, =*=,
 | =s=     | schedule            | =d=       | deadline                   |
 | =.=     | timestamp           | =!=       | inactive timestamp         |
 | =l=     | insert link         | =y=       | store (yank) link          |
+| =i=     | paste image         |           |                            |
 | =o=     | open at point       | =x=       | toggle checkbox            |
 | =h=     | new heading         | =*= / =-= | toggle heading / list item |
 | =w=     | refile              | =A=       | archive subtree            |
@@ -1750,6 +1753,9 @@ Executing asks for confirmation for every block (=org-confirm-babel-evaluate=).
 (define-key glz/org-map "!" #'org-time-stamp-inactive)
 (define-key glz/org-map "l" #'org-insert-link)
 (define-key glz/org-map "y" #'org-store-link)
+;; Paste an image from the clipboard (e.g. a phone screenshot): saved as an
+;; attachment next to the file (data/), with a link at point.
+(define-key glz/org-map "i" #'yank-media)
 (define-key glz/org-map "o" #'org-open-at-point)
 (define-key glz/org-map "x" #'org-toggle-checkbox)
 (define-key glz/org-map "h" #'org-insert-heading-respect-content)
@@ -1830,6 +1836,7 @@ Executing asks for confirmation for every block (=org-confirm-babel-evaluate=).
     "s" "schedule"          "d" "deadline"
     "." "timestamp"         "!" "inactive timestamp"
     "l" "insert link"       "y" "store link"
+    "i" "paste image"
     "o" "open at point"     "x" "toggle checkbox"
     "h" "new heading"       "*" "toggle heading"
     "-" "toggle list item"  "w" "refile"
