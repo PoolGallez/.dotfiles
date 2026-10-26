@@ -557,11 +557,9 @@ screen.  The default face is bumped up ~15% (fine-tune with =SPC t ==, then
 (when (eq glz/platform 'android)
   (when (fboundp 'pixel-scroll-precision-mode)
     (pixel-scroll-precision-mode 1))
-<<<<<<< HEAD
-  (set-face-attribute 'default nil :height 130)
-    (setq default-directory "/data/data/com.termux/files/home/") ; Point by default to the termux home to get the syncthing stuff synched
-  (setq overriding-text-conversion-style nil))
-=======
+  ;; Point by default to the Termux home, where Syncthing puts the files.
+  (setq default-directory "/data/data/com.termux/files/home/")
+  (setq overriding-text-conversion-style nil)
   (setq touch-screen-precision-scroll t
         touch-screen-word-select t
         touch-screen-extend-selection t
@@ -656,7 +654,6 @@ Hidden buffers (name starting with a space: which-key, transient, ...) and
         doom-modeline-buffer-encoding nil
         doom-modeline-minor-modes nil
         doom-modeline-workspace-name nil))
->>>>>>> 2bb03e5 (Improved of the sprint system + android usability)
 #+end_src
 
 ** Startup performance display

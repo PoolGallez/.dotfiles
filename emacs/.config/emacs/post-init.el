@@ -95,6 +95,9 @@ for it instead of assuming, same pattern as the Org Roam sqlite check.")
 (when (eq glz/platform 'android)
   (when (fboundp 'pixel-scroll-precision-mode)
     (pixel-scroll-precision-mode 1))
+  ;; Point by default to the Termux home, where Syncthing puts the files.
+  (setq default-directory "/data/data/com.termux/files/home/")
+  (setq overriding-text-conversion-style nil)
   (setq touch-screen-precision-scroll t
         touch-screen-word-select t
         touch-screen-extend-selection t
