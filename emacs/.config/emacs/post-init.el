@@ -139,24 +139,81 @@ A capture is never dropped by accident: there it only reminds of the keys."
     (with-eval-after-load 'which-key
       (which-key-add-keymap-based-replacements glz/toggle-map "k" "keyboard")))
 
+  ;; Emacs has no keyboard icon, so this one is drawn here (# = ink), in the
+  ;; same format and colours as the built-in black-and-white icons: a PBM
+  ;; bitmap with the foreground and background of the `tool-bar' face.
+  ;; Like the built-in icons it is computed when the bar is drawn, so it
+  ;; follows the theme (loaded after this section).
+  (defconst glz/keyboard-icon-rows
+    '("........................"
+      "........................"
+      "........................"
+      "........................"
+      "........................"
+      ".######################."
+      ".#....................#."
+      ".#.##.##.##.##.##.##..#."
+      ".#.##.##.##.##.##.##..#."
+      ".#....................#."
+      ".#..##.##.##.##.##.##.#."
+      ".#..##.##.##.##.##.##.#."
+      ".#....................#."
+      ".#.##..##########..##.#."
+      ".#.##..##########..##.#."
+      ".#....................#."
+      ".######################."
+      "........................"
+      "........................"
+      "........................"
+      "........................"
+      "........................"
+      "........................"
+      "........................")
+    "The keyboard icon, # = ink.")
+
+  (defun glz/keyboard-icon ()
+    "The keyboard icon as a PBM image in the colours of the `tool-bar' face."
+    (let ((fg (face-attribute 'tool-bar :foreground))
+          (bg (face-attribute 'tool-bar :background)))
+      (apply #'create-image
+             (concat "P1\n24 24\n"
+                     (mapconcat (lambda (row) (string-replace "." "0 " (string-replace "#" "1 " row)))
+                                glz/keyboard-icon-rows "\n"))
+             'pbm t
+             (append (unless (eq fg 'unspecified) (list :foreground fg))
+                     (unless (eq bg 'unspecified) (list :background bg))))))
+
+  ;; The usual Emacs buttons (open, cut, copy, paste, search, ...) plus the
+  ;; phone ones.  The keyboard sits next to home, so it is never cut off.
   (defconst glz/tool-bar-map
     (let ((map (make-sparse-keymap)))
-      ;; Seven buttons, one row on a phone.  Training, agenda, notes, ... are
-      ;; one tap away on the dashboard; undo is u, M-x is Alt+x or SPC m x.
-      ;; The keyboard sits next to home, so it is never the one cut off when
-      ;; the bar is wider than the screen.  Emacs has no keyboard icon:
-      ;; "spell" (ABC with a tick) is the closest built-in one.
       (dolist (item '(("home" glz/dashboard "Dashboard")
-                      ("spell" glz/show-keyboard "Show the keyboard")
+                      keyboard
                       ("new" org-capture "Capture")
                       ("left-arrow" glz/android-back "Back")
+                      sep
+                      ("open" find-file "Open or create a file")
+                      ("diropen" dired "Open a folder")
+                      ("close" kill-current-buffer "Close this buffer")
                       ("save" save-buffer "Save")
+                      ("undo" undo "Undo")
+                      sep
+                      ("cut" clipboard-kill-region "Cut" :enable (use-region-p))
+                      ("copy" clipboard-kill-ring-save "Copy" :enable (use-region-p))
+                      ("paste" clipboard-yank "Paste")
+                      ("search" isearch-forward "Search")
+                      sep
                       ("checked" glz/finish-key "Finish (C-c C-c)"
                        :enable (commandp (key-binding (kbd "C-c C-c"))))
                       ("cancel" glz/abort-key "Abort (C-c C-k)"
                        :enable (commandp (key-binding (kbd "C-c C-k"))))))
-        (pcase-let ((`(,icon ,cmd ,help . ,props) item))
-          (apply #'tool-bar-local-item icon cmd cmd map :help help props)))
+        (pcase item
+          ('sep (define-key-after map (vector (gensym "sep")) menu-bar-separator))
+          ('keyboard (define-key-after map [glz/show-keyboard]
+                       `(menu-item "Keyboard" glz/show-keyboard :help "Show the keyboard"
+                                   :image (glz/keyboard-icon))))
+          (`(,icon ,cmd ,help . ,props)
+           (apply #'tool-bar-local-item icon cmd cmd map :help help props))))
       map)
     "Tool bar of the Android frames.")
 
