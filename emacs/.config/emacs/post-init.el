@@ -32,7 +32,7 @@ assuming the platform has it.")
 PATH bridge (see Pre-Early-Init) once the shared-UID setup is done. Probes
 for it instead of assuming, same pattern as the Org Roam sqlite check.")
 (defvar glz/enable-pdf-tools       (memq glz/platform '(windows linux)))
-(defvar glz/enable-sprint          (memq glz/platform '(windows linux android)))
+(defvar glz/enable-sprint          (memq glz/platform '(linux android)))
 
 (defvar glz/org-directory
   (pcase glz/platform
@@ -428,14 +428,6 @@ Hidden buffers (name starting with a space: which-key, transient, ...) and
 
 (use-package consult
   :init
-  ;; glz/buffer-map is declared in use-package meow which appears later in the
-  ;; file; defer the binding until meow has loaded (meow has :demand t so this
-  ;; fires during the same startup sequence, just after meow's use-package).
-  (with-eval-after-load 'meow
-    (define-key glz/buffer-map "b" #'consult-buffer)
-    (with-eval-after-load 'which-key
-      (which-key-add-keymap-based-replacements glz/buffer-map
-        "b" "consult-buffer")))
   :bind (("C-c M-x" . consult-mode-command)
          ("C-c h" . consult-history)
          ("C-c k" . consult-kmacro)
@@ -536,6 +528,8 @@ Hidden buffers (name starting with a space: which-key, transient, ...) and
         (isearch-yank-string text))))
 
   (define-prefix-command 'glz/buffer-map)
+  ;; SPC b b: pick a buffer with consult (preview, recent files, bookmarks).
+  (define-key glz/buffer-map "b" #'consult-buffer)
   (define-key glz/buffer-map "p" #'previous-buffer)
   (define-key glz/buffer-map "n" #'next-buffer)
   (define-key glz/buffer-map "k" #'kill-current-buffer)
@@ -1908,12 +1902,20 @@ not immediately undone."
   :hook (after-init . which-key-mode)
   :config
   (setq which-key-idle-delay 0.3)
-  ;; Default is a quarter of the frame, which splits big maps (C-c C-x,
-  ;; C-x on a phone) into pages.  When it still does not fit, the last
-  ;; slot says how many keys are left; C-h n / C-h p pages through them.
-  (setq which-key-side-window-max-height 0.5
-        which-key-max-description-length 30
-        which-key-show-remaining-keys t)
+  ;; On a phone the default popup (a quarter of the screen) splits big maps
+  ;; like SPC o into pages, and Meow's SPC leader cannot page (C-h n does not
+  ;; reach which-key while the keypad waits).  So there the popup may use
+  ;; three quarters of the screen, and labels are cut only as far as needed
+  ;; for the largest map (about 40 keys) to fit; the look stays which-key's.
+  ;; Other platforms keep the which-key defaults.
+  (when (eq glz/platform 'android)
+    (setq which-key-side-window-max-height 0.75
+          which-key-max-description-length
+          (lambda (width)
+            (let* ((rows (max 1 (1- (floor (* 0.75 (frame-height))))))
+                   (cols (ceiling 40 rows)))
+              (min 27 (max 6 (- (/ width cols) 8)))))
+          which-key-show-remaining-keys t))
 
   ;; Top-level leader descriptions (shown in the SPC popup).
   ;; mode-specific-map is Meow's leader keymap, so SPC x = C-c x.
@@ -1941,6 +1943,7 @@ not immediately undone."
     "m" "maximize"      "F" "fullscreen")
 
   (which-key-add-keymap-based-replacements glz/buffer-map
+    "b" "switch buffer"
     "p" "previous-buffer"
     "n" "next-buffer"
     "k" "kill-buffer"
@@ -1989,56 +1992,6 @@ not immediately undone."
     "C-c C-v" "babel"
     "C-c C-x" "org extras (clock, properties, ...)"
     "C-c ^" "sort"))
-
-(defun glz/keypad-describe (keymap)
-  "Show every key of KEYMAP, fitted to the frame, while the keypad waits."
-  (when (and keymap (not defining-kbd-macro) (not meow--keypad-help))
-    (let (pairs)
-      (map-keymap
-       (lambda (event def)
-         ;; which-key labels are stored in the keymap as (LABEL . COMMAND).
-         (let* ((label (and (consp def) (stringp (car def)) (car def)))
-                (cmd (if label (cdr def) def)))
-           (when (and cmd (not (consp event)))
-             (push (cons (single-key-description event)
-                         (if (or (keymapp cmd) (and (symbolp cmd) (get cmd 'meow-dispatch)))
-                             (concat "+" (string-remove-suffix " →" (or label "prefix")))
-                           (or label (format "%s" cmd))))
-                   pairs))))
-       keymap)
-      (setq pairs (sort pairs (lambda (a b)
-                                (let ((x (downcase (car a))) (y (downcase (car b))))
-                                  (if (string= x y) (string> (car a) (car b)) (string< x y))))))
-      (let* ((width (frame-width))
-             (keyw (apply #'max 1 (mapcar (lambda (p) (string-width (car p))) pairs)))
-             (longest (apply #'max 1 (mapcar (lambda (p) (string-width (cdr p))) pairs)))
-             ;; Columns needed for all rows to fit, then the label width they allow.
-             (need (ceiling (length pairs) (max 5 (- (frame-height) 4))))
-             (descw (min longest (max 6 (- (/ (+ width 2) need) keyw 5))))
-             (cols (max 1 (/ (+ width 2) (+ keyw descw 5))))
-             (rows (max 1 (ceiling (length pairs) cols)))
-             (lines (make-vector rows nil))
-             (pre (meow--keypad-format-prefix))
-             (message-log-max nil)
-             (max-mini-window-height 1.0))
-        ;; Column-major, like which-key: down the first column, then the next.
-        (seq-do-indexed
-         (lambda (p i)
-           (push (concat (propertize (string-pad (car p) keyw) 'face 'font-lock-constant-face)
-                         " → " (string-pad (truncate-string-to-width (cdr p) descw nil nil "…") descw))
-                 (aref lines (% i rows))))
-         pairs)
-        (save-window-excursion
-          (with-temp-message
-              (format "%s\nKEYPAD: %s%s"
-                      (mapconcat (lambda (cells) (string-join (nreverse cells) "  ")) lines "\n")
-                      (if (string-blank-p pre) "" (propertize pre 'face 'font-lock-comment-face))
-                      (propertize (meow--keypad-format-keys nil) 'face 'font-lock-string-face))
-            (sit-for 1000000 t)))))))
-
-(add-hook 'which-key-mode-hook
-          (lambda () (setq meow-keypad-describe-keymap-function #'glz/keypad-describe))
-          90)
 
 (use-package helpful
   :commands (helpful-callable
