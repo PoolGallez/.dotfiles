@@ -524,18 +524,19 @@ keys Android otherwise mishandles.
 *One tool bar, at the bottom* (placed there in Pre-Early-Init).  The default
 desktop tool bar (new file, open, cut, copy, paste, ...) is replaced by:
 
-| Icon        | Action                                                        |
-|-------------+---------------------------------------------------------------|
-| home        | dashboard                                                     |
-| new         | org-capture                                                   |
-| jump-to     | today's training (sprint)                                     |
-| index       | agenda dashboard                                              |
-| left-arrow  | back: leave the minibuffer, close a split, or previous buffer |
-| save / undo | save buffer / undo                                            |
-| checked     | finish: what =C-c C-c= does here (capture, log form, ...)     |
-| cancel      | abort: what =C-c C-k= does here                               |
-| search      | =M-x=                                                         |
-| spell       | show the on-screen keyboard (also =SPC t k=)                  |
+| Icon       | Action                                                        |
+|------------+---------------------------------------------------------------|
+| home       | dashboard                                                     |
+| new        | org-capture                                                   |
+| spell      | show the on-screen keyboard (also =SPC t k=)                  |
+| left-arrow | back: leave the minibuffer, close a split, or previous buffer |
+| save       | save buffer                                                   |
+| checked    | finish: what =C-c C-c= does here (capture, log form, ...)     |
+| cancel     | abort: what =C-c C-k= does here                               |
+
+Seven buttons, so the bar stays one row on a phone; training, agenda and
+notes are one tap away on the dashboard, undo is =u=, and =M-x= is Alt+x or
+=SPC m x=.
 
 The finish/abort buttons are greyed out where those keys do nothing.  The
 built-in tool bar is never built at all (=tool-bar-setup= is skipped), which
@@ -610,25 +611,19 @@ A capture is never dropped by accident: there it only reminds of the keys."
 
   (defconst glz/tool-bar-map
     (let ((map (make-sparse-keymap)))
-      (dolist (item `(("home" glz/dashboard "Dashboard")
+      ;; Seven buttons, one row on a phone.  Training, agenda, notes, ... are
+      ;; one tap away on the dashboard; undo is u, M-x is Alt+x or SPC m x.
+      (dolist (item '(("home" glz/dashboard "Dashboard")
                       ("new" org-capture "Capture")
-                      ,@(when glz/enable-sprint '(("jump-to" glz/sprint-today "Today's training")))
-                      ("index" glz/agenda-dashboard "Agenda")
-                      sep
+                      ("spell" glz/show-keyboard "Show the keyboard")
                       ("left-arrow" glz/android-back "Back")
                       ("save" save-buffer "Save")
-                      ("undo" undo "Undo")
-                      sep
                       ("checked" glz/finish-key "Finish (C-c C-c)"
                        :enable (commandp (key-binding (kbd "C-c C-c"))))
                       ("cancel" glz/abort-key "Abort (C-c C-k)"
-                       :enable (commandp (key-binding (kbd "C-c C-k"))))
-                      ("search" execute-extended-command "M-x")
-                      ("spell" glz/show-keyboard "Show the keyboard")))
-        (if (eq item 'sep)
-            (define-key-after map (vector (gensym "sep")) menu-bar-separator)
-          (pcase-let ((`(,icon ,cmd ,help . ,props) item))
-            (apply #'tool-bar-local-item icon cmd cmd map :help help props))))
+                       :enable (commandp (key-binding (kbd "C-c C-k"))))))
+        (pcase-let ((`(,icon ,cmd ,help . ,props) item))
+          (apply #'tool-bar-local-item icon cmd cmd map :help help props)))
       map)
     "Tool bar of the Android frames.")
 

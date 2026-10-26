@@ -141,25 +141,19 @@ A capture is never dropped by accident: there it only reminds of the keys."
 
   (defconst glz/tool-bar-map
     (let ((map (make-sparse-keymap)))
-      (dolist (item `(("home" glz/dashboard "Dashboard")
+      ;; Seven buttons, one row on a phone.  Training, agenda, notes, ... are
+      ;; one tap away on the dashboard; undo is u, M-x is Alt+x or SPC m x.
+      (dolist (item '(("home" glz/dashboard "Dashboard")
                       ("new" org-capture "Capture")
-                      ,@(when glz/enable-sprint '(("jump-to" glz/sprint-today "Today's training")))
-                      ("index" glz/agenda-dashboard "Agenda")
-                      sep
+                      ("spell" glz/show-keyboard "Show the keyboard")
                       ("left-arrow" glz/android-back "Back")
                       ("save" save-buffer "Save")
-                      ("undo" undo "Undo")
-                      sep
                       ("checked" glz/finish-key "Finish (C-c C-c)"
                        :enable (commandp (key-binding (kbd "C-c C-c"))))
                       ("cancel" glz/abort-key "Abort (C-c C-k)"
-                       :enable (commandp (key-binding (kbd "C-c C-k"))))
-                      ("search" execute-extended-command "M-x")
-                      ("spell" glz/show-keyboard "Show the keyboard")))
-        (if (eq item 'sep)
-            (define-key-after map (vector (gensym "sep")) menu-bar-separator)
-          (pcase-let ((`(,icon ,cmd ,help . ,props) item))
-            (apply #'tool-bar-local-item icon cmd cmd map :help help props))))
+                       :enable (commandp (key-binding (kbd "C-c C-k"))))))
+        (pcase-let ((`(,icon ,cmd ,help . ,props) item))
+          (apply #'tool-bar-local-item icon cmd cmd map :help help props)))
       map)
     "Tool bar of the Android frames.")
 
