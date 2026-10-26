@@ -38,9 +38,11 @@ which-key shows what is available after each prefix.
 | SPC .   | find-file              |                                                          |
 | SPC SPC | project-find-file      |                                                          |
 | SPC d   | dashboard              | start page: sprint, capture, agenda, notes, recent files |
+| SPC T   | Tasks.org              | open the task list                                       |
+| SPC n   | notes                  | Keep-style quick notes: new, checklist, board, labels    |
 | SPC o   | org                    | agenda, capture, TODO states, links, clock, roam, sprint |
 | SPC g   | git                    | magit (status, commit, push, blame, ediff, smerge)       |
-| SPC b   | buffers                | prev/next/kill, copy file path/name                      |
+| SPC b   | buffers                | prev/next/kill, recent files, copy file path/name        |
 | SPC w   | windows / perspectives | window moves and splits, project workspaces              |
 | SPC f   | frames                 | new/delete/other frame, fullscreen                       |
 | SPC t   | toggles                | line numbers, text scale                                 |
@@ -50,16 +52,17 @@ which-key shows what is available after each prefix.
 | SPC ?   | cheatsheet             | Meow's key cheatsheet                                    |
 ** The PKDB knowledge base
 PKDB ("personal knowledge database") is a plain folder, =~/PKDB=, identical
-on every device.  Emacs creates missing folders and the five core org files
+on every device.  Emacs creates missing folders and the six core org files
 at startup, and never touches existing ones.
 
 | Path          | Purpose                                                          |
 |---------------+------------------------------------------------------------------|
-| Tasks.org     | all tasks; the only file in the agenda besides the two below     |
+| Tasks.org     | all tasks (agenda)                                               |
 | Calendar.org  | appointments (agenda)                                            |
 | Birthdays.org | birthdays (agenda)                                               |
 | Archive.org   | refile target for finished or cancelled items                    |
 | Health.org    | body measurements: the Weight table (weekly weigh-in)            |
+| Keep.org      | quick notes and checklists, Google Keep style (agenda, =SPC n=)  |
 | Notes/        | long structured notes, one folder per course, chapters in files  |
 | roam/         | org-roam Zettelkasten (small linked notes, daily notes)          |
 | Athletics/    | TrainingDB.org (exercise database) and Sprint/ (training system) |
@@ -232,6 +235,8 @@ its exercises as TODOs, /Log the session/ for the exercise-by-exercise form,
 /Not as planned/ when the day went differently, and /All sprint commands/ for
 the rest of the =SPC o S= map as a tappable list.  The ✓ / ✗ buttons of the
 tool bar finish or abort the capture or log form (=C-c C-c= / =C-c C-k=).
+Each of these (and new note, notes board, ...) can also get its own icon on
+the home screen: see "Shortcuts from outside Emacs".
 ** Git, projects and the rest
 - *Magit* (=SPC g g=) is the git client; =project.el= is advised so every
   project gets its own *perspective* (workspace with its own buffers),
@@ -435,6 +440,7 @@ Personal knowledge base layout (same on every platform, relative to
 | Birthdays.org     | Birthdays (agenda)                                                      |
 | Archive.org       | Refile target for completed/cancelled items                             |
 | Health.org        | Body measurements: Weight table (capture =w=, read by sprint.el)        |
+| Keep.org          | Quick notes and checklists, Google Keep style (capture =k= / =K=)       |
 | Notes/            | Long, structured notes                                                  |
 | roam/             | Org-roam Zettelkasten                                                   |
 | Athletics/Sprint/ | Sprint training system (config, plan, log, schedule; code in sprint.el) |
@@ -464,7 +470,8 @@ their content comes from the sync tool.
     ("Calendar.org"  . "#+title: Calendar\n\n")
     ("Birthdays.org" . "#+title: Birthdays\n\n")
     ("Archive.org"   . "#+title: Archive\n\n")
-    ("Health.org"    . "#+title: Health\n#+STARTUP: overview\n\n* Weight\nWeekly weigh-in (SPC o c w): same scale, in the morning, after the toilet, before eating\nor drinking, in underwear.  One row per weigh-in; sprint.el reads this table.\n\n| Date | kg | Note |\n|------+----+------|\n"))
+    ("Health.org"    . "#+title: Health\n#+STARTUP: overview\n\n* Weight\nWeekly weigh-in (SPC o c w): same scale, in the morning, after the toilet, before eating\nor drinking, in underwear.  One row per weigh-in; sprint.el reads this table.\n\n| Date | kg | Note |\n|------+----+------|\n")
+    ("Keep.org"      . "#+title: Keep\n#+STARTUP: overview\n\n* Notes\nQuick notes and checklists (SPC n).  Newest first; tag :pinned: to keep one on top.\n"))
   "Org files in `glz/org-directory' with their initial content.")
 
 (defun glz/org-file (name)
@@ -517,17 +524,17 @@ keys Android otherwise mishandles.
 *One tool bar, at the bottom* (placed there in Pre-Early-Init).  The default
 desktop tool bar (new file, open, cut, copy, paste, ...) is replaced by:
 
-| Icon        | Action                                                          |
-|-------------+-----------------------------------------------------------------|
-| home        | dashboard                                                       |
-| new         | org-capture                                                     |
-| jump-to     | today's training (sprint)                                       |
-| index       | agenda dashboard                                                |
-| left-arrow  | back: leave the minibuffer, close a split, or previous buffer   |
-| save / undo | save buffer / undo                                              |
-| checked     | finish: what =C-c C-c= does here (capture, log form, ...)       |
-| cancel      | abort: what =C-c C-k= does here                                 |
-| search      | =M-x=                                                           |
+| Icon        | Action                                                        |
+|-------------+---------------------------------------------------------------|
+| home        | dashboard                                                     |
+| new         | org-capture                                                   |
+| jump-to     | today's training (sprint)                                     |
+| index       | agenda dashboard                                              |
+| left-arrow  | back: leave the minibuffer, close a split, or previous buffer |
+| save / undo | save buffer / undo                                            |
+| checked     | finish: what =C-c C-c= does here (capture, log form, ...)     |
+| cancel      | abort: what =C-c C-k= does here                               |
+| search      | =M-x=                                                         |
 
 The finish/abort buttons are greyed out where those keys do nothing.  The
 built-in tool bar is never built at all (=tool-bar-setup= is skipped), which
@@ -588,7 +595,7 @@ A capture is never dropped by accident: there it only reminds of the keys."
   (defun glz/finish-key () "Finish: run C-c C-c." (interactive) (glz/run-key "C-c C-c"))
   (defun glz/abort-key () "Abort: run C-c C-k." (interactive) (glz/run-key "C-c C-k"))
 
-  (defvar glz/tool-bar-map
+  (defconst glz/tool-bar-map
     (let ((map (make-sparse-keymap)))
       (dolist (item `(("home" glz/dashboard "Dashboard")
                       ("new" org-capture "Capture")
@@ -619,7 +626,7 @@ A capture is never dropped by accident: there it only reminds of the keys."
   (setq-default tool-bar-map glz/tool-bar-map)
 
   ;; ── Every buffer in the selected window ───────────────────────────────
-  (defvar glz/android-split-buffers
+  (defconst glz/android-split-buffers
     '("\\`\\*Completions\\*" "\\`\\*Org Select\\*" "\\`\\*Agenda Commands\\*"
       "\\`\\*Org Links\\*" "\\`\\*Org Attach\\*" "\\`\\*Calendar\\*"
       "\\`\\*Embark Actions\\*" "\\`\\*Warnings\\*" "\\`\\*Choices\\*")
@@ -1057,6 +1064,7 @@ evil-mc for multiple cursors.
   (define-key glz/buffer-map "p" #'previous-buffer)
   (define-key glz/buffer-map "n" #'next-buffer)
   (define-key glz/buffer-map "k" #'kill-current-buffer)
+  (define-key glz/buffer-map "r" #'consult-recent-file)
   (define-key glz/buffer-map "y" 'glz/buffer-yank-map)
   (define-key glz/buffer-yank-map "p" #'glz/copy-buffer-file-path)
   (define-key glz/buffer-yank-map "n" #'glz/copy-buffer-file-name)
@@ -1154,6 +1162,7 @@ evil-mc for multiple cursors.
   (meow-leader-define-key
    '("." . find-file)
    '("d" . glz/dashboard)
+   '("T" . glz/open-tasks)
    '("SPC" . project-find-file)
    '("g" . glz/git-map)
    '("b" . glz/buffer-map)
@@ -1395,7 +1404,7 @@ In every other state KEY keeps its current `org-mode-map' binding."
 
   ;; Directories and agenda files
   (setq org-directory glz/org-directory)
-  (setq org-agenda-files (mapcar #'glz/org-file '("Tasks.org" "Birthdays.org" "Calendar.org")))
+  (setq org-agenda-files (mapcar #'glz/org-file '("Tasks.org" "Keep.org" "Birthdays.org" "Calendar.org")))
 
   ;; org-roam only indexes org-directory/roam/, so id: links to/from the
   ;; course notes in org-directory/Notes/ (index + chapter files) need
@@ -1520,7 +1529,11 @@ In every other state KEY keeps its current `org-mode-map' binding."
            "* %?\n  %^t\n %i")
           ("w" "Weight" table-line (file+headline ,(glz/org-file "Health.org") "Weight")
            "| %<%Y-%m-%d> | %(glz/weight-read) | %^{Note (optional)} |"
-           :immediate-finish t)))
+           :immediate-finish t)
+          ("k" "Note" entry (file+headline ,(glz/org-file "Keep.org") "Notes")
+           "* %?\n:PROPERTIES:\n:CREATED: %U\n:END:\n%i" :prepend t :empty-lines-after 1)
+          ("K" "Checklist" entry (file+headline ,(glz/org-file "Keep.org") "Notes")
+           "* %^{Title} [/]\n:PROPERTIES:\n:CREATED: %U\n:END:\n- [ ] %?" :prepend t :empty-lines-after 1)))
 
   ;; ── Weekly weigh-in ──────────────────────────────────────────────────
   ;; The "w" capture appends a row to the Weight table of Health.org.  The
@@ -1805,7 +1818,12 @@ on the first try without loading org at startup.
 (when glz/enable-sprint
   (with-eval-after-load 'org
     (let ((f (expand-file-name "sprint.el" user-emacs-directory)))
-      (if (file-exists-p f) (load-file f)
+      (if (file-exists-p f)
+          (progn
+            (load-file f)
+            ;; sprint.el rebinds SPC o S, which drops its which-key label.
+            (with-eval-after-load 'which-key
+              (which-key-add-keymap-based-replacements glz/org-map "S" "sprint →")))
         (message "Warning: %s not found, skipping sprint" f))))
 
   (defun glz/sprint-map-first-use ()
@@ -1818,6 +1836,79 @@ on the first try without loading org at startup.
 
   (unless (featurep 'sprint)
     (define-key glz/org-map "S" #'glz/sprint-map-first-use)))
+#+end_src
+**** Keep notes (=SPC n=)
+Google Keep in org: =Keep.org= holds short notes and checklists under one
+=* Notes= heading, newest first.  It is in the agenda, so a note gets a
+reminder simply by scheduling it (=SPC o s=); labels are ordinary tags, a
+note tagged =:pinned:= stays at the top of the board, and a finished note is
+archived like a task (=SPC o w=, to =Archive.org=).
+
+| Key     | Action                                                         |
+|---------+----------------------------------------------------------------|
+| SPC n n | new note (first line = title; =C-c C-c= saves)                 |
+| SPC n l | new checklist: asks a title, then =- [ ]= items (=M-RET= adds) |
+| SPC n b | board: pinned notes, then the others; tap/RET opens one        |
+| SPC n t | notes with a label (tag)                                       |
+| SPC n p | pin / unpin the note at point                                  |
+| SPC n f | open Keep.org                                                  |
+
+Captures =k= (note) and =K= (checklist) are also in the =SPC o c= menu, and
+=k= / =K= (and =v= for the board) on the dashboard.  The checklist title counts the ticked items
+(=[2/5]=); tap or =RET= on an item ticks it.
+#+begin_src emacs-lisp
+(defun glz/capture-note () "New quick note in Keep.org." (interactive) (org-capture nil "k"))
+(defun glz/capture-checklist () "New checklist in Keep.org." (interactive) (org-capture nil "K"))
+(defun glz/notes-open () "Open Keep.org." (interactive) (find-file (glz/org-file "Keep.org")))
+
+(defun glz/notes-board () "Board of all notes, pinned first." (interactive) (org-agenda nil "k"))
+
+(defun glz/notes-label (tag)
+  "Show the notes of Keep.org tagged TAG."
+  (interactive
+   (list (completing-read "Label: "
+                          (with-current-buffer (find-file-noselect (glz/org-file "Keep.org"))
+                            (mapcar #'car (org-get-buffer-tags))))))
+  (let ((org-agenda-files (list (glz/org-file "Keep.org"))))
+    (org-tags-view nil (concat "LEVEL=2+" tag))))
+
+(defun glz/notes-toggle-pin ()
+  "Pin or unpin the note at point (also from the board)."
+  (interactive)
+  (if (derived-mode-p 'org-agenda-mode)
+      (let ((marker (or (org-get-at-bol 'org-hd-marker) (user-error "No note on this line"))))
+        (org-with-point-at marker
+          (org-toggle-tag "pinned")
+          (save-buffer))
+        (org-agenda-redo))
+    (save-excursion (org-back-to-heading t) (org-toggle-tag "pinned"))))
+
+(with-eval-after-load 'org
+  (add-to-list 'org-agenda-custom-commands
+               `("k" "Notes board"
+                 ((tags "LEVEL=2+pinned" ((org-agenda-overriding-header "📌 Pinned")))
+                  (tags "LEVEL=2-pinned" ((org-agenda-overriding-header "Notes"))))
+                 ((org-agenda-files '(,(glz/org-file "Keep.org")))
+                  (org-agenda-prefix-format "  ")))
+               t))
+
+(define-prefix-command 'glz/notes-map)
+(define-key glz/notes-map "n" #'glz/capture-note)
+(define-key glz/notes-map "l" #'glz/capture-checklist)
+(define-key glz/notes-map "b" #'glz/notes-board)
+(define-key glz/notes-map "t" #'glz/notes-label)
+(define-key glz/notes-map "p" #'glz/notes-toggle-pin)
+(define-key glz/notes-map "f" #'glz/notes-open)
+
+(with-eval-after-load 'meow
+  (meow-leader-define-key '("n" . glz/notes-map)))
+
+(with-eval-after-load 'which-key
+  (which-key-add-keymap-based-replacements mode-specific-map "n" "notes")
+  (which-key-add-keymap-based-replacements glz/notes-map
+    "n" "new note"        "l" "new checklist"
+    "b" "board"           "t" "by label"
+    "p" "pin / unpin"     "f" "open Keep.org"))
 #+end_src
 **** AUCTeX-based LaTeX preview (org-auctex)
 Org's built-in LaTeX preview (=dvipng=, synchronous) recompiles the whole
@@ -2083,7 +2174,9 @@ Frame creation is left to the emacsclient caller (-c), because
     t))
 #+end_src
 *** Dashboard (start page)
-A Doom-style start page in about a hundred lines and no package: a banner,
+A Doom-style start page in about a hundred lines and no package: a banner
+(GLZ in slanted letters with speed lines, "GLZ OS · personal operating
+system" underneath),
 today's date and planned training, and a short menu of the things done most
 often.  It is the first buffer at startup and in every new =emacsclient -c=
 frame (popup frames run a command and are not affected), and comes back with
@@ -2099,16 +2192,18 @@ Every entry can be pressed with its key, with =RET=, or tapped.  The same
 keys work only in the dashboard; the right column shows the leader key that
 reaches the command from anywhere (hidden on narrow screens).
 
-| Key | Entry                     | Key | Entry                           |
-|-----+---------------------------+-----+---------------------------------|
-| t   | today's training          | a   | agenda dashboard                |
-| l   | log the session           | T   | Tasks.org                       |
-| d   | not as planned today      | N   | find a note (org-roam or Notes) |
-| S   | sprint agenda             | r   | recent files                    |
-| s   | all sprint commands       | p   | switch project                  |
-| c   | capture menu              | b   | buffers                         |
-| n   | new task                  | G   | magit status (if enabled)       |
-| w   | weigh-in                  | e   | this configuration              |
+| Key | Entry                | Key | Entry                           |
+|-----+----------------------+-----+---------------------------------|
+| t   | today's training     | a   | agenda dashboard                |
+| l   | log the session      | T   | Tasks.org                       |
+| d   | not as planned today | N   | find a note (org-roam or Notes) |
+| S   | sprint agenda        | r   | recent files                    |
+| s   | all sprint commands  | p   | switch project                  |
+| c   | capture menu         | b   | buffers                         |
+| n   | new task             | G   | magit status (if enabled)       |
+| w   | weigh-in             | e   | this configuration              |
+| k   | new note             | K   | new checklist                   |
+| v   | notes board          |     |                                 |
 
 =g= redraws, =q= buries the buffer, =TAB= / =S-TAB= jump between entries and
 =j= / =k= move as everywhere.  "All sprint commands" lists every command of
@@ -2130,10 +2225,18 @@ one.  =glz/keymap-menu= does the same for any keymap.
 (defconst glz/dashboard-buffer-name "*dashboard*")
 
 (defconst glz/dashboard-banner
-  '(" ___ __  __   _   ___ ___ "
-    "| __|  \\/  | /_\\ / __/ __|"
-    "| _|| |\\/| |/ _ \\ (__\\__ \\"
-    "|___|_|  |_/_/ \\_\\___|___/"))
+  '("       ________ _____"
+    "  ━━  / ____/ //__  /"
+    " ━━━ / / __/ /   / /"
+    "  ━━/ /_/ / /___/ /__"
+    "    \\____/_____/____/")
+  "Banner: GLZ in slanted letters with speed lines (a sprinter's start).
+Drawn as one block, so the lines keep their alignment.")
+
+(defconst glz/dashboard-banner-narrow '("━━ GLZ OS")
+  "Banner for windows narrower than `glz/dashboard-banner'.")
+
+(defconst glz/dashboard-tagline "GLZ OS · personal operating system")
 
 ;; Small commands for the entries, so they can be bound and shown by name.
 ;; sprint.el is loaded together with org, so its commands do not exist
@@ -2188,7 +2291,7 @@ one.  =glz/keymap-menu= does the same for any keymap.
       (glz/keymap-menu "Sprint: " sprint-map)
     (message "sprint.el is not loaded (see *Messages*)")))
 
-(defvar glz/dashboard-sections
+(defconst glz/dashboard-sections
   `(,@(when glz/enable-sprint
         '(("Sprint"
            ("t" "Today's training" glz/sprint-today "SPC o S t")
@@ -2200,12 +2303,16 @@ one.  =glz/keymap-menu= does the same for any keymap.
      ("c" "Capture…" org-capture "SPC o c")
      ("n" "New task" glz/capture-task "SPC o c t")
      ("w" "Weigh-in" glz/capture-weight "SPC o c w"))
+    ("Notes"
+     ("k" "New note" glz/capture-note "SPC n n")
+     ("K" "New checklist" glz/capture-checklist "SPC n l")
+     ("v" "Notes board" glz/notes-board "SPC n b"))
     ("Org"
      ("a" "Agenda" glz/agenda-dashboard "SPC o a d")
-     ("T" "Tasks" glz/open-tasks nil)
-     ("N" "Find note" glz/find-note "SPC o r f"))
+     ("T" "Tasks" glz/open-tasks "SPC T")
+     ("N" "Find note" glz/find-note ,(if glz/enable-org-roam "SPC o r f" "SPC o r")))
     ("Emacs"
-     ("r" "Recent files" consult-recent-file nil)
+     ("r" "Recent files" consult-recent-file "SPC b r")
      ("p" "Projects" project-switch-project "SPC p p")
      ("b" "Buffers" consult-buffer "SPC b b")
      ,@(when glz/enable-magit '(("G" "Magit" magit-status "SPC g g")))
@@ -2276,9 +2383,14 @@ one.  =glz/keymap-menu= does the same for any keymap.
     (setq glz/dashboard--width width)
     (erase-buffer)
     (insert "\n")
-    (if (>= width 30)
-        (dolist (line glz/dashboard-banner) (funcall center line 'glz/dashboard-banner))
-      (funcall center "E M A C S" 'glz/dashboard-banner))
+    (let* ((fits (lambda (art) (<= (apply #'max (mapcar #'string-width art)) width)))
+           (art (if (funcall fits glz/dashboard-banner) glz/dashboard-banner
+                  glz/dashboard-banner-narrow))
+           (left (make-string (max 0 (/ (- width (apply #'max (mapcar #'string-width art))) 2)) ?\s)))
+      (dolist (line art)
+        (insert left (propertize line 'face 'glz/dashboard-banner) "\n")))
+    (funcall center (truncate-string-to-width glz/dashboard-tagline width nil nil "…")
+             'glz/dashboard-hint)
     (insert "\n")
     (funcall center (format-time-string "%A %e %B %Y") 'glz/dashboard-heading)
     (dolist (line (glz/dashboard--sprint-lines))
@@ -2362,6 +2474,119 @@ one.  =glz/keymap-menu= does the same for any keymap.
                1 nil (lambda ()
                        (with-demoted-errors "Dashboard preload: %S" (require 'org))
                        (glz/dashboard-refresh))))))
+#+end_src
+*** Shortcuts from outside Emacs (Android home screen)
+Any of the dashboard workflows can be opened directly from the phone's home
+screen, like a separate app.  The mechanism is =org-protocol=: Emacs for
+Android registers itself as the handler of =org-protocol://= links (see the
+"Android File System" node of the Emacs manual), and a link
+
+#+begin_example
+org-protocol://glz?go=note
+#+end_example
+
+runs the command named =note= in =glz/shortcuts= (only those commands: a
+link from a web page cannot run anything else).  The same links work on the
+desktop daemon, e.g. =emacsclient -n "org-protocol://glz?go=note"= for a
+NixOS key binding.
+
+| go=       | Opens         | go=    | Opens            |
+|-----------+---------------+--------+------------------|
+| home      | dashboard     | today  | today's training |
+| note      | new note      | log    | log the session  |
+| checklist | new checklist | task   | new task         |
+| notes     | notes board   | agenda | agenda dashboard |
+| capture   | capture menu  | weight | weigh-in         |
+
+*Setting it up on the phone, with Termux:Widget* (one icon per workflow):
+1. Install Termux:Widget from F-Droid.  It must be signed with the same key
+   as Termux, so re-sign it the way Termux and Emacs were re-signed for the
+   shared user ID (Pre-Early-Init → Termux binaries on PATH).
+2. In Emacs: =M-x glz/android-install-shortcuts=.  It writes one small script
+   per entry of =glz/shortcuts= into =~/.shortcuts/tasks/= of Termux (tasks
+   run in the background, without opening a terminal).  Each script just
+   sends the link: =am start -a android.intent.action.VIEW -d 'org-protocol://glz?go=note'=.
+3. On the home screen: long-press → Widgets → Termux:Widget.  The 1×1
+   "shortcut" widget puts a single entry (e.g. /New note/) on the home
+   screen as its own icon; the list widget shows all of them.  The first time,
+   Android may ask which app opens the link: choose Emacs, "Always".
+
+*Without Termux:Widget*, any launcher or app that makes home-screen
+shortcuts for an intent or URL (an "intent shortcut", e.g. Shortcut Maker)
+works: action =android.intent.action.VIEW=, data =org-protocol://glz?go=…=.
+
+Emacs needs its server running to receive the link: it is started on
+Android at startup.  If Emacs is not running at all, Android starts it with
+the link as argument; that is handled too, once startup has finished.
+#+begin_src emacs-lisp
+(defconst glz/shortcuts
+  '(("home"      "Emacs"            glz/dashboard)
+    ("note"      "New note"         glz/capture-note)
+    ("checklist" "New checklist"    glz/capture-checklist)
+    ("notes"     "Notes"            glz/notes-board)
+    ("task"      "New task"         glz/capture-task)
+    ("capture"   "Capture"          org-capture)
+    ("agenda"    "Agenda"           glz/agenda-dashboard)
+    ("today"     "Today's training" glz/sprint-today)
+    ("log"       "Log training"     glz/sprint-log)
+    ("weight"    "Weigh-in"         glz/capture-weight))
+  "Commands reachable as org-protocol://glz?go=NAME: (NAME LABEL COMMAND).
+LABEL names the Termux:Widget script.")
+
+(defun glz/org-protocol-go (info)
+  "Run the `glz/shortcuts' command named by the go= parameter of INFO."
+  (let* ((name (plist-get info :go))
+         (cmd (nth 2 (assoc name glz/shortcuts))))
+    (if (not cmd)
+        (message "org-protocol glz: unknown shortcut %S" name)
+      ;; Leave the server process first: captures read keys and prompts.
+      (run-at-time 0 nil (lambda () (call-interactively cmd)))))
+  nil)
+
+(with-eval-after-load 'org-protocol
+  (add-to-list 'org-protocol-protocol-alist
+               '("glz" :protocol "glz" :function glz/org-protocol-go)))
+
+;; The desktop daemon has no startup screen to slow down: have the links
+;; work from the start there too.
+(when (daemonp)
+  (run-with-idle-timer 2 nil (lambda () (require 'org-protocol))))
+
+(when (eq glz/platform 'android)
+  ;; The link arrives through emacsclient, i.e. the server, and is only
+  ;; recognised once org-protocol is loaded (it loads org: done when idle).
+  (add-hook 'emacs-startup-hook
+            (lambda ()
+              (require 'server)
+              (unless (server-running-p) (server-start))
+              (run-with-idle-timer 1.5 nil (lambda () (require 'org-protocol)))))
+
+  ;; Emacs was not running: the link is a command-line argument.
+  (add-hook 'command-line-functions
+            (lambda ()
+              (when (string-prefix-p "org-protocol:" (symbol-value 'argi))
+                (let ((url (symbol-value 'argi)))
+                  (add-hook 'emacs-startup-hook
+                            (lambda ()
+                              (require 'org-protocol)
+                              (org-protocol-check-filename-for-protocol url nil nil))
+                            90))
+                t)))
+
+  (defun glz/android-install-shortcuts ()
+    "Write a Termux:Widget script for every entry of `glz/shortcuts'."
+    (interactive)
+    (let ((dir "/data/data/com.termux/files/home/.shortcuts/tasks/"))
+      (make-directory dir t)
+      (pcase-dolist (`(,name ,label ,_) glz/shortcuts)
+        (let ((file (expand-file-name label dir)))
+          (with-temp-file file
+            (insert "#!/data/data/com.termux/files/usr/bin/sh\n"
+                    (format "am start -a android.intent.action.VIEW -d 'org-protocol://glz?go=%s' >/dev/null 2>&1\n"
+                            name)))
+          (set-file-modes file #o700)))
+      (message "%d shortcuts written to %s; add them with the Termux:Widget widget"
+               (length glz/shortcuts) dir))))
 #+end_src
 *** Dired
 #+begin_src emacs-lisp
@@ -2481,6 +2706,12 @@ not immediately undone."
   :hook (after-init . which-key-mode)
   :config
   (setq which-key-idle-delay 0.3)
+  ;; Default is a quarter of the frame, which splits big maps (C-c C-x,
+  ;; C-x on a phone) into pages.  When it still does not fit, the last
+  ;; slot says how many keys are left; C-h n / C-h p pages through them.
+  (setq which-key-side-window-max-height 0.5
+        which-key-max-description-length 30
+        which-key-show-remaining-keys t)
 
   ;; Top-level leader descriptions (shown in the SPC popup).
   ;; mode-specific-map is Meow's leader keymap, so SPC x = C-c x.
@@ -2511,6 +2742,7 @@ not immediately undone."
     "p" "previous-buffer"
     "n" "next-buffer"
     "k" "kill-buffer"
+    "r" "recent files"
     "y" "yank →")
   (which-key-add-keymap-based-replacements glz/buffer-yank-map
     "p" "yank full path"
@@ -2527,6 +2759,7 @@ not immediately undone."
     "s" "eshell"
     "c" "open Config.org"
     "d" "dashboard"
+    "T" "Tasks.org"
     "^" "outline / sort")
 
   (which-key-add-key-based-replacements
@@ -2554,6 +2787,68 @@ not immediately undone."
     "C-c C-v" "babel"
     "C-c C-x" "org extras (clock, properties, ...)"
     "C-c ^" "sort"))
+#+end_src
+*** Leader popup (Meow keypad)
+=SPC= is Meow's keypad leader.  Meow hands its popup to which-key (a shim
+that sets =meow-keypad-describe-keymap-function= when =which-key-mode= starts),
+and which-key splits a map that does not fit (=SPC o= on a phone) into pages.
+Its paging keys (=C-h n=) do not reach it while the keypad waits for the next
+key, so the keys on the other pages could not be seen at all.
+
+This popup shows every key of the map on one page instead: sorted like
+which-key, with the which-key labels (prefixes get a =+=), shortened just
+enough for all keys to fit the frame.  It is installed after Meow's shim
+(hook depth 90), which would otherwise put which-key back.
+#+begin_src emacs-lisp
+(defun glz/keypad-describe (keymap)
+  "Show every key of KEYMAP, fitted to the frame, while the keypad waits."
+  (when (and keymap (not defining-kbd-macro) (not meow--keypad-help))
+    (let (pairs)
+      (map-keymap
+       (lambda (event def)
+         ;; which-key labels are stored in the keymap as (LABEL . COMMAND).
+         (let* ((label (and (consp def) (stringp (car def)) (car def)))
+                (cmd (if label (cdr def) def)))
+           (when (and cmd (not (consp event)))
+             (push (cons (single-key-description event)
+                         (if (or (keymapp cmd) (and (symbolp cmd) (get cmd 'meow-dispatch)))
+                             (concat "+" (string-remove-suffix " →" (or label "prefix")))
+                           (or label (format "%s" cmd))))
+                   pairs))))
+       keymap)
+      (setq pairs (sort pairs (lambda (a b)
+                                (let ((x (downcase (car a))) (y (downcase (car b))))
+                                  (if (string= x y) (string> (car a) (car b)) (string< x y))))))
+      (let* ((width (frame-width))
+             (keyw (apply #'max 1 (mapcar (lambda (p) (string-width (car p))) pairs)))
+             (longest (apply #'max 1 (mapcar (lambda (p) (string-width (cdr p))) pairs)))
+             ;; Columns needed for all rows to fit, then the label width they allow.
+             (need (ceiling (length pairs) (max 5 (- (frame-height) 4))))
+             (descw (min longest (max 6 (- (/ (+ width 2) need) keyw 5))))
+             (cols (max 1 (/ (+ width 2) (+ keyw descw 5))))
+             (rows (max 1 (ceiling (length pairs) cols)))
+             (lines (make-vector rows nil))
+             (pre (meow--keypad-format-prefix))
+             (message-log-max nil)
+             (max-mini-window-height 1.0))
+        ;; Column-major, like which-key: down the first column, then the next.
+        (seq-do-indexed
+         (lambda (p i)
+           (push (concat (propertize (string-pad (car p) keyw) 'face 'font-lock-constant-face)
+                         " → " (string-pad (truncate-string-to-width (cdr p) descw nil nil "…") descw))
+                 (aref lines (% i rows))))
+         pairs)
+        (save-window-excursion
+          (with-temp-message
+              (format "%s\nKEYPAD: %s%s"
+                      (mapconcat (lambda (cells) (string-join (nreverse cells) "  ")) lines "\n")
+                      (if (string-blank-p pre) "" (propertize pre 'face 'font-lock-comment-face))
+                      (propertize (meow--keypad-format-keys nil) 'face 'font-lock-string-face))
+            (sit-for 1000000 t)))))))
+
+(add-hook 'which-key-mode-hook
+          (lambda () (setq meow-keypad-describe-keymap-function #'glz/keypad-describe))
+          90)
 #+end_src
 *** Helpful (better help screens)
 #+begin_src emacs-lisp
