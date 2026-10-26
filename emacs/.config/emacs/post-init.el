@@ -127,6 +127,18 @@ A capture is never dropped by accident: there it only reminds of the keys."
   (defun glz/finish-key () "Finish: run C-c C-c." (interactive) (glz/run-key "C-c C-c"))
   (defun glz/abort-key () "Abort: run C-c C-k." (interactive) (glz/run-key "C-c C-k"))
 
+  ;; Android only shows the keyboard by itself on a tap in editable text or
+  ;; in the minibuffer; read-only buffers (dashboard, agenda) never get it.
+  (defun glz/show-keyboard ()
+    "Show the on-screen keyboard (Android Back hides it again)."
+    (interactive)
+    (frame-toggle-on-screen-keyboard (selected-frame) nil))
+  ;; glz/toggle-map is created in the Meow section, further down.
+  (with-eval-after-load 'meow
+    (define-key glz/toggle-map "k" #'glz/show-keyboard)
+    (with-eval-after-load 'which-key
+      (which-key-add-keymap-based-replacements glz/toggle-map "k" "keyboard")))
+
   (defconst glz/tool-bar-map
     (let ((map (make-sparse-keymap)))
       (dolist (item `(("home" glz/dashboard "Dashboard")
@@ -142,7 +154,8 @@ A capture is never dropped by accident: there it only reminds of the keys."
                        :enable (commandp (key-binding (kbd "C-c C-c"))))
                       ("cancel" glz/abort-key "Abort (C-c C-k)"
                        :enable (commandp (key-binding (kbd "C-c C-k"))))
-                      ("search" execute-extended-command "M-x")))
+                      ("search" execute-extended-command "M-x")
+                      ("spell" glz/show-keyboard "Show the keyboard")))
         (if (eq item 'sep)
             (define-key-after map (vector (gensym "sep")) menu-bar-separator)
           (pcase-let ((`(,icon ,cmd ,help . ,props) item))
@@ -1449,14 +1462,14 @@ Frame creation is left to the emacsclient caller (-c), because
 
 (defconst glz/dashboard-banner
   '("       ________ _____"
-    "  ━━  / ____/ //__  /"
-    " ━━━ / / __/ /   / /"
-    "  ━━/ /_/ / /___/ /__"
+    "  ==  / ____/ //__  /"
+    " === / / __/ /   / /"
+    "  ==/ /_/ / /___/ /__"
     "    \\____/_____/____/")
   "Banner: GLZ in slanted letters with speed lines (a sprinter's start).
 Drawn as one block, so the lines keep their alignment.")
 
-(defconst glz/dashboard-banner-narrow '("━━ GLZ OS")
+(defconst glz/dashboard-banner-narrow '("== GLZ OS")
   "Banner for windows narrower than `glz/dashboard-banner'.")
 
 (defconst glz/dashboard-tagline "GLZ OS · personal operating system")
