@@ -1,114 +1,82 @@
-# Edit this configuration file to define what should be installed on
-# your system.  Help is available in the configuration.nix(5) man page
-# and in the NixOS manual (accessible by running ‘nixos-help’).
-
+# GPD Pocket 4 laptop/convertible.
 { config, pkgs, ... }:
 
 {
-
   imports =
     [ # Include the results of the hardware scan.
-      ../common/common.nix
       ./hardware-configuration.nix
-      ../../modules/nixos/desktop/plasma.nix
-      ../../modules/nixos/gaming.nix
-      ../../modules/nixos/comms.nix
-      ../../modules/nixos/emacs.nix
-      ../../modules/nixos/virtualization.nix
-      ../../modules/nixos/syncthing.nix
+      ../../modules/nixos
     ];
 
-  # Bootloader.
-  boot.loader.systemd-boot.enable = true;
-  boot.loader.efi.canTouchEfiVariables = true;
+  my.profiles.workstation.enable = true;
+
+  # "plasma" or "gnome" — the one desktop (and app suite) this host gets.
+  my.desktop.environment = "gnome";
+
+  my.apps = {
+    gaming.enable = true;
+    comms.enable = true;
+    emacs.enable = true;
+    virtualisation.enable = true;
+    wireshark.enable = true;
+    nextcloud-client.enable = true;
+  };
+
+  my.services.syncthing.enable = true;
 
   # To cross compile and perform updates on rock64
   boot.binfmt.emulatedSystems = [ "aarch64-linux" ];
 
   # For Gpd, package to enable automatic screen rotation
   hardware.sensor.iio.enable = true;
+  # The ACPI mount matrix of the accelerometer follows the panel's native
+  # portrait axes, not the landscape ones after panel_orientation, so the
+  # desktop saw "right-up" with the lid open normally. Rotated by 90°, as
+  # 60-sensor.hwdb asks for rotated panels.
+  services.udev.extraHwdb = ''
+    sensor:modalias:acpi:MXC6655*:dmi:*:svnGPD:pnG1628-04:*
+     ACCEL_MOUNT_MATRIX=-1, 0, 0; 0, 1, 0; 0, 0, -1
+  '';
+
+  # No hardware tablet-mode switch on the GPD: derive one from the
+  # accelerometer, so GNOME/Plasma know when to offer the on-screen keyboard.
+  my.hardware.tablet-switch = {
+    enable = true;
+    flatSeconds = 1.5; # lying flat this long switches to tablet mode
+  };
+
+  # The Novatek I2C-HID touchscreen sometimes comes back dead from s2idle
+  # (it stays bound but never sends reports). Rebinding the driver on
+  # every resume re-initialises it; it takes about a second.
+  powerManagement.resumeCommands = ''
+    dev=i2c-NVTK0603:00
+    drv=/sys/bus/i2c/drivers/i2c_hid_acpi
+    if [ -e /sys/bus/i2c/devices/$dev ]; then
+      [ -e $drv/$dev ] && echo $dev > $drv/unbind
+      sleep 0.5
+      echo $dev > $drv/bind || echo "touchscreen rebind failed" >&2
+    fi
+  '';
+
+  # FocalTech FT9362 fingerprint reader (2808:0752): fprintd for GDM/SDDM,
+  # the lock screens and sudo. Enroll with `fprintd-enroll` or in Settings.
+  my.hardware.focaltech-fingerprint.enable = true;
 
   hardware.bluetooth.enable = true;
-  # Use latest kernel.
-  boot.kernelPackages = pkgs.linuxPackages_latest;
 
   boot.initrd.luks.devices."luks-58f51fba-fd89-4cae-99e3-e453154fdd8e".device = "/dev/disk/by-uuid/58f51fba-fd89-4cae-99e3-e453154fdd8e";
   networking.hostName = "getriebe"; # Define your hostname.
-  #networking.wireless.enable = true;  # Enables wireless support via wpa_supplicant.
-
-  # Configure network proxy if necessary
-  # networking.proxy.default = "http://user:password@proxy:port/";
-  # networking.proxy.noProxy = "127.0.0.1,localhost,internal.domain";
 
   # Power saving for portable machine
   networking.networkmanager.wifi.powersave = true;
 
+  users.users.pool.extraGroups = [ "input" ];
 
-  # Configure keymap in X11
-  services.xserver.xkb = {
-    layout = "us";
-    variant = "";
-  };
-
-  # Enable CUPS to print documents.
-  services.printing.enable = true;
-
-  users.users.pool = {
-    isNormalUser = true;
-    description = "Paolo Galletta";
-    extraGroups = [ "networkmanager" "wheel" "input" ];
-    packages = with pkgs; [
-    #  thunderbird
-    ];
-  };
-
-  # Install firefox.
-  programs.firefox.enable = true;
-
-  # List packages installed in system profile. To search, run:
-  # $ nix search wget
   environment.systemPackages = with pkgs; [
-    #  wget
-    wireshark
     usbutils
-    kdePackages.kaccounts-integration
-    kdePackages.kaccounts-providers
-    kdePackages.signond
-    kdePackages.accounts-qt # or libsForQt5 if you are on Plasma 5
-    kdePackages.qtwebengine # required backend for the Nextcloud login webview in the accounts wizard
-    nextcloud-client # syncs a local folder + shows up as a Dolphin Places entry
     claude-code
     wireguard-tools
   ];
-
-  virtualisation.libvirtd = {
-	enable = true;
-   	qemu.vhostUserPackages = with pkgs; [ virtiofsd ];
-  };
-
-  virtualisation.spiceUSBRedirection.enable = true;
-  programs.virt-manager.enable = true;
-  programs.wireshark.enable = true;
-  programs.wireshark.usbmon.enable = true;
-  users.groups.wireshark.members = [ "pool" ];
-  # Some programs need SUID wrappers, can be configured further or are
-  # started in user sessions.
-  # programs.mtr.enable = true;
-  # programs.gnupg.agent = {
-  #   enable = true;
-  #   enableSSHSupport = true;
-  # };
-
-  # List services that you want to enable:
-
-  # Enable the OpenSSH daemon.
-  # services.openssh.enable = true;
-
-  # Open ports in the firewall.
-  # networking.firewall.allowedTCPPorts = [ ... ];
-  # networking.firewall.allowedUDPPorts = [ ... ];
-  # Or disable the firewall altogether.
-  # networking.firewall.enable = false;
 
   # This value determines the NixOS release from which the default
   # settings for stateful data, like file locations and database versions

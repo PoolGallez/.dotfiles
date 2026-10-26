@@ -2,11 +2,15 @@
 
 {
   imports = [
-    ./modules/home/neovim.nix
-    ./modules/home/emacs-shortcuts.nix
-    ./modules/home/cli-tools.nix
-    ./modules/home/org-toolchain.nix
+    ./modules/home
   ];
+
+  my.home = {
+    cli.enable = true;
+    neovim.enable = true;
+    emacs.enable = true;
+    org-toolchain.enable = true;
+  };
 
   # Home Manager needs a bit of information about you and the paths it should
   # manage.

@@ -772,6 +772,52 @@ init.el forces fundamental-mode and nil message; override both here.
 (setq initial-scratch-message
       ";; This buffer is for text that is not saved, and for Lisp evaluation.\n;; To create a file, visit it with `\\[find-file]' and enter text in its buffer.\n\n")
 #+end_src
+*** Unicode fallbacks (fonts that lack a symbol)
+The config shows a few non-ASCII symbols: arrows in the menu labels, bullets,
+=·=, =…=, =✓=, =×= in the sprint reports, and so on.  A font without one of
+them (the phone's, and sometimes Windows') draws boxes or random symbols.
+
+When the first graphical frame exists, every symbol of
+=glz/unicode-fallbacks= that no installed font can display is replaced
+everywhere by its ASCII stand-in (=→= becomes =->=), using Emacs's own
+=glyphless-char-display= table, so no label has to change.  The org heading
+bullets, list bullets and fold marker are drawn differently (compositions
+and the ellipsis), so they are chosen with =glz/glyph= instead, again at the
+first graphical frame: a desktop daemon starts without one.
+#+begin_src emacs-lisp
+(defconst glz/unicode-fallbacks
+  '((?→ . "->") (?← . "<-") (?↑ . "^") (?↓ . "v") (?▲ . "^") (?▾ . "v")
+    (?· . ".") (?… . "...") (?• . "*") (?« . "<<") (?» . ">>")
+    (?— . "-") (?– . "-") (?− . "-") (?─ . "-") (?━ . "=")
+    (?× . "x") (?≈ . "~") (?≥ . ">=") (?✓ . "+") (?✗ . "x") (?📌 . "*")
+    (?◉ . "*") (?○ . "o") (?● . "*"))
+  "Non-ASCII symbols the config shows, with ASCII stand-ins for fonts that lack them.")
+
+(defun glz/glyph (preferred fallback)
+  "PREFERRED if a font can display it, else FALLBACK.
+Before any graphical frame exists (a daemon starting up), PREFERRED."
+  (if (or (not (display-graphic-p))
+          (seq-every-p #'char-displayable-p preferred))
+      preferred
+    fallback))
+
+(defvar glz/unicode-check-hook nil
+  "Run once a graphical frame exists, to choose symbols with `glz/glyph'.")
+
+(defvar glz/unicode-checked nil "Non-nil once `glz/unicode-check' ran on a graphical frame.")
+
+(defun glz/unicode-check (&rest _)
+  "Replace the symbols no font can display, once, on the first graphical frame."
+  (when (and (not glz/unicode-checked) (display-graphic-p))
+    (setq glz/unicode-checked t)
+    (pcase-dolist (`(,char . ,ascii) glz/unicode-fallbacks)
+      (unless (char-displayable-p char)
+        (set-char-table-range glyphless-char-display char ascii)))
+    (run-hooks 'glz/unicode-check-hook)))
+
+(add-hook 'emacs-startup-hook #'glz/unicode-check)
+(add-hook 'server-after-make-frame-hook #'glz/unicode-check)
+#+end_src
 *** System clipboard integration
 #+begin_src emacs-lisp
 ;; Meow overrides select-enable-clipboard with its own variable inside meow-save.
@@ -1366,10 +1412,21 @@ features that are unnecessary for a read-only reference document.
   :mode ("\\.org\\'" . org-mode)
   :hook (org-mode . glz/org-mode-setup)
   :config
-  ;; The phone's font has no ▾ (it showed as stray symbols): » there, which
-  ;; every font has.
-  (setq org-ellipsis (if (eq glz/platform 'android) " »" " ▾")
-        org-hide-emphasis-markers t)
+  (setq org-hide-emphasis-markers t)
+
+  ;; Fold marker and bullets, with fallbacks for fonts that lack them (see
+  ;; "Unicode fallbacks").  On the phone the fold marker is », by choice.
+  (defvar glz/org-list-bullet "•" "Symbol drawn over the - of plain list items.")
+  (defun glz/org-glyphs ()
+    "Choose the org fold marker and bullets the fonts can display."
+    (setq org-ellipsis (if (eq glz/platform 'android) " »" (glz/glyph " ▾" " >>"))
+          glz/org-list-bullet (glz/glyph "•" "-")
+          org-bullets-bullet-list
+          (mapcar (lambda (bullet)
+                    (glz/glyph bullet (alist-get (string-to-char bullet) glz/unicode-fallbacks "*")))
+                  '("◉" "○" "●" "○" "●" "○" "●"))))
+  (glz/org-glyphs)
+  (add-hook 'glz/unicode-check-hook #'glz/org-glyphs)
 
   ;; ── Structure editing (M-hjkl, all states) ───────────────────────────
   ;; Same as org's own M-<arrow> keys, on the Meow direction letters:
@@ -1464,7 +1521,7 @@ In every other state KEY keeps its current `org-mode-map' binding."
   (font-lock-add-keywords 'org-mode
                           '(("^ *\\([-]\\) "
                              (0 (prog1 () (compose-region (match-beginning 1)
-                                                          (match-end 1) "•"))))))
+                                                          (match-end 1) glz/org-list-bullet))))))
 
   ;; Directories and agenda files
   (setq org-directory glz/org-directory)
@@ -1646,9 +1703,8 @@ In every other state KEY keeps its current `org-mode-map' binding."
 
 (use-package org-bullets
   :after org
-  :hook (org-mode . org-bullets-mode)
-  :custom
-  (org-bullets-bullet-list '("◉" "○" "●" "○" "●" "○" "●")))
+  ;; The bullet symbols are chosen by glz/org-glyphs (Basic settings above).
+  :hook (org-mode . org-bullets-mode))
 #+end_src
 **** Typst export (ox-typst)
 Adds a Typst backend to the export dispatcher: =C-c C-e y p= exports the
@@ -1694,7 +1750,7 @@ buffer).  Several keys mirror org's own =C-c= keys (=.=, =!=, =-=, =*=,
 | =s=     | schedule            | =d=       | deadline                   |
 | =.=     | timestamp           | =!=       | inactive timestamp         |
 | =l=     | insert link         | =y=       | store (yank) link          |
-| =i=     | paste image         |           |                            |
+| =I=     | paste image         |           |                            |
 | =o=     | open at point       | =x=       | toggle checkbox            |
 | =h=     | new heading         | =*= / =-= | toggle heading / list item |
 | =w=     | refile              | =A=       | archive subtree            |
@@ -1755,7 +1811,9 @@ Executing asks for confirmation for every block (=org-confirm-babel-evaluate=).
 (define-key glz/org-map "y" #'org-store-link)
 ;; Paste an image from the clipboard (e.g. a phone screenshot): saved as an
 ;; attachment next to the file (data/), with a link at point.
-(define-key glz/org-map "i" #'yank-media)
+;; Not "i": Meow's keypad tries C-i (= TAB, cycle fold) first, so SPC o i
+;; could never be reached.
+(define-key glz/org-map "I" #'yank-media)
 (define-key glz/org-map "o" #'org-open-at-point)
 (define-key glz/org-map "x" #'org-toggle-checkbox)
 (define-key glz/org-map "h" #'org-insert-heading-respect-content)
@@ -1836,7 +1894,7 @@ Executing asks for confirmation for every block (=org-confirm-babel-evaluate=).
     "s" "schedule"          "d" "deadline"
     "." "timestamp"         "!" "inactive timestamp"
     "l" "insert link"       "y" "store link"
-    "i" "paste image"
+    "I" "paste image"
     "o" "open at point"     "x" "toggle checkbox"
     "h" "new heading"       "*" "toggle heading"
     "-" "toggle list item"  "w" "refile"

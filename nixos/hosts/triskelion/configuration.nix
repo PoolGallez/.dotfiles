@@ -1,61 +1,31 @@
-# Edit this configuration file to define what should be installed on
-# your system.  Help is available in the configuration.nix(5) man page
-# and in the NixOS manual (accessible by running ‘nixos-help’).
-
-{ config, pkgs, ... }:
+# Desktop PC.
+{ config, lib, pkgs, ... }:
 
 {
   imports =
     [ # Include the results of the hardware scan.
-      ../common/common.nix
       ./hardware-configuration.nix
-      ../../modules/nixos/desktop/plasma.nix
-      ../../modules/nixos/gaming.nix
-      ../../modules/nixos/comms.nix
-      ../../modules/nixos/emacs.nix
+      ../../modules/nixos
     ];
 
-  # Bootloader.
-  boot.loader.systemd-boot.enable = true;
-  boot.loader.efi.canTouchEfiVariables = true;
+  my.profiles.workstation.enable = true;
 
-  # Use latest kernel.
-  boot.kernelPackages = pkgs.linuxPackages_latest;
+  # "plasma" or "gnome" — the one desktop (and app suite) this host gets.
+  my.desktop.environment = "plasma";
+
+  my.apps = {
+    gaming.enable = true;
+    comms.enable = true;
+    emacs.enable = true;
+  };
 
   boot.initrd.luks.devices."luks-b66bc40c-4e17-458f-98b6-239bb12f6bd1".device = "/dev/disk/by-uuid/b66bc40c-4e17-458f-98b6-239bb12f6bd1";
   networking.hostName = "triskelion"; # Define your hostname.
-  # networking.wireless.enable = true;  # Enables wireless support via wpa_supplicant.
 
-  # Configure network proxy if necessary
-  # networking.proxy.default = "http://user:password@proxy:port/";
-  # networking.proxy.noProxy = "127.0.0.1,localhost,internal.domain";
-
-  # Set your time zone.
-  time.timeZone = "Europe/Rome";
-
-  # Configure keymap in X11
-  services.xserver.xkb = {
-    layout = "us";
-    variant = "";
-  };
-
-  # Enable CUPS to print documents.
-  services.printing.enable = true;
-
-
-  # Define a user account. Don't forget to set a password with ‘passwd’.
-  users.users.pool = {
-    isNormalUser = true;
-    description = "Paolo Galletta";
-    extraGroups = [ "networkmanager" "wheel" ];
-    packages = with pkgs; [
-      kdePackages.kate
-    ];
-  };
-
-
-    # Install firefox.
-  programs.firefox.enable = true;
+  # KDE app: only alongside Plasma (GNOME brings its own Text Editor).
+  users.users.pool.packages = lib.optionals (config.my.desktop.environment == "plasma") [
+    pkgs.kdePackages.kate
+  ];
 
   programs.nix-ld.enable = true;
   programs.nix-ld.libraries = with pkgs; [

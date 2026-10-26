@@ -50,7 +50,6 @@
 			rocky = lib.nixosSystem {
 				system = "aarch64-linux";
 				modules = [
-				      ./modules/nixos/common/nix.nix
 				      ./hosts/rocky/configuration.nix
 				      sops-nix.nixosModules.sops
 				];
@@ -60,17 +59,27 @@
 
 			};
 		};
-		homeConfigurations = {
-		     pool = home-manager.lib.homeManagerConfiguration {
+		# One home configuration per desktop host, named user@host so a plain
+		# `home-manager switch --flake .` picks the right one. Each follows
+		# its host's my.desktop.environment — switching DE there switches
+		# the user-level desktop settings too.
+		homeConfigurations = let
+		  homeFor = host: home-manager.lib.homeManagerConfiguration {
 			  inherit pkgs;
 			  modules = [
 			  plasma-manager.homeModules.plasma-manager
-			  ./home.nix];
+			  ./home.nix
+			  (let os = self.nixosConfigurations.${host}.config; in {
+			    my.home.desktop.environment = os.my.desktop.environment;
+			    my.home.desktop.tabletSwitch = os.my.hardware.tablet-switch.enable;
+			  })
+			  ];
 			  extraSpecialArgs = {inherit inputs;};
-		     };
-
-
-	};
+		  };
+		in {
+		     "pool@getriebe" = homeFor "getriebe";
+		     "pool@triskelion" = homeFor "triskelion";
+		};
 
   	};
 }
