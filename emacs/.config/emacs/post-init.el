@@ -190,6 +190,8 @@ A capture is never dropped by accident: there it only reminds of the keys."
       (dolist (item '(("home" glz/dashboard "Dashboard")
                       keyboard
                       ("new" org-capture "Capture")
+                      ("unchecked" glz/org-todo-menu "TODO state / clock"
+                       :enable (derived-mode-p 'org-mode 'org-agenda-mode))
                       ("left-arrow" glz/android-back "Back")
                       sep
                       ("open" find-file "Open or create a file")
@@ -1136,6 +1138,87 @@ In every other state KEY keeps its current `org-mode-map' binding."
   :after org
   ;; The bullet symbols are chosen by glz/org-glyphs (Basic settings above).
   :hook (org-mode . org-bullets-mode))
+
+(defvar glz/org-clock-in-states '("IN WORK")
+  "TODO states that clock the entry in when it enters them.")
+
+(defvar glz/org-clock-state-commands
+  '(org-todo org-agenda-todo org-shiftright org-shiftleft
+    org-agenda-todo-nextset org-agenda-todo-previousset glz/org-todo-menu)
+  "Commands whose state changes drive the automatic clock.
+Other callers of `org-todo' (code changing states in bulk) do not.")
+
+(defun glz/org-clocking-here-p ()
+  "Non-nil when the running clock is in the entry at point (its CLOCK line).
+Indirect buffers (e.g. the sprint \"today\" view) count as their base buffer."
+  (let ((base (lambda (b) (or (buffer-base-buffer b) b))))
+    (and (org-clocking-p)
+         (eq (funcall base (marker-buffer org-clock-marker)) (funcall base (current-buffer)))
+         (save-excursion
+           (org-back-to-heading t)
+           (and (<= (point) org-clock-marker)
+                (> (org-with-wide-buffer (org-entry-end-position)) org-clock-marker))))))
+
+;; Org itself clocks a DONE entry out before `org-after-todo-state-change-hook'
+;; runs, so whether the entry was being clocked is noted before the change.
+(defvar glz/org--clocked-before nil
+  "Non-nil while `org-todo' runs on the entry that was being clocked.")
+
+(defun glz/org--note-clock (fn &rest args)
+  (let ((glz/org--clocked-before (ignore-errors (glz/org-clocking-here-p))))
+    (apply fn args)))
+(advice-add 'org-todo :around #'glz/org--note-clock)
+
+(defun glz/org-auto-clock ()
+  "Clock in on `glz/org-clock-in-states', out on leaving the clocked entry, chain on DONE.
+Runs from `org-after-todo-state-change-hook' (point on the changed entry)."
+  (when (memq this-command glz/org-clock-state-commands)
+    (save-excursion
+      (org-back-to-heading t)
+      (let ((here (glz/org-clocking-here-p)))
+        (cond
+         ((member org-state glz/org-clock-in-states)
+          (unless here (org-clock-in)))
+         (glz/org--clocked-before
+          (when here (org-clock-out nil t))
+          ;; the chain: the next open sibling takes over the clock
+          (when (member org-state org-done-keywords)
+            (let (next)
+              (save-excursion
+                (while (and (not next) (org-get-next-sibling))
+                  (let ((st (org-get-todo-state)))
+                    (when (and st (not (member st org-done-keywords)))
+                      (setq next (point))))))
+              (when next
+                (goto-char next)
+                (org-clock-in)
+                (message "Clocked in: %s" (org-get-heading t t t t)))))))))))
+
+(add-hook 'org-after-todo-state-change-hook #'glz/org-auto-clock)
+
+(defun glz/org-todo-menu ()
+  "Set the TODO state of the entry at point (Org or agenda) from a popup menu.
+Also offers Clock in / Clock out.  Meant for a tap (Android tool bar)."
+  (interactive)
+  (let* ((agenda (derived-mode-p 'org-agenda-mode))
+         (marker (cond (agenda (or (org-get-at-bol 'org-hd-marker)
+                                   (user-error "No entry on this line")))
+                       ((derived-mode-p 'org-mode) nil)
+                       (t (user-error "Not in an Org buffer"))))
+         (states (if marker
+                     (with-current-buffer (marker-buffer marker) org-todo-keywords-1)
+                   org-todo-keywords-1))
+         (choice (x-popup-menu
+                  (if (listp last-nonmenu-event) last-nonmenu-event t)
+                  (list "TODO state"
+                        (cons "" (append (mapcar (lambda (s) (cons s s)) states)
+                                         '(("(no state)" . none) "--"
+                                           ("Clock in" . clock-in) ("Clock out" . clock-out))))))))
+    (pcase choice
+      ('nil nil)
+      ('clock-in (if agenda (org-agenda-clock-in) (org-clock-in)))
+      ('clock-out (if agenda (org-agenda-clock-out) (org-clock-out)))
+      (_ (if agenda (org-agenda-todo choice) (org-todo choice))))))
 
 (use-package ox-typst
   :ensure t

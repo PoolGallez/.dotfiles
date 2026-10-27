@@ -354,6 +354,11 @@ default, race, train or taper (the 10-day taper table)."
   "Non-nil: add Warm-Up & Activation to High-CNS sessions that do not name it."
   :type 'boolean)
 
+(defcustom sprint-show-execution t
+  "Non-nil: put each exercise's EXECUTION (TrainingDB.org) on a \"How:\" line under it
+in the schedule, and in the shared HTML."
+  :type 'boolean)
+
 (defvar sprint--all-weeks nil "Week records of the season being generated.")
 (defvar sprint--usage nil "Hash name -> (count . last-week) while generating.")
 (defvar sprint--streak nil "Hash name -> (first-week . last-week) of the current run of consecutive weeks.")
@@ -383,7 +388,8 @@ default, race, train or taper (the 10-day taper table)."
                                    (and f (not (equal f "none")) (split-string f)))
                           :unit (cdr (assoc "VOLUME_UNIT" props))
                           :vol (cdr (assoc "TYPICAL_VOLUME" props))
-                          :next (cdr (assoc "PROGRESSION" props)))
+                          :next (cdr (assoc "PROGRESSION" props))
+                          :how (cdr (assoc "EXECUTION" props)))
                     res))))
         (nreverse res)))))
 
@@ -1087,7 +1093,33 @@ Records the picks in `sprint--session-picks' (the caller binds it)."
 
 (defun sprint--as-subtodos (joined)
   "One \"*** TODO\" line per exercise of JOINED (texts separated by \\x1f)."
-  (mapconcat (lambda (s) (concat "*** TODO " s "\n")) (split-string joined "\x1f" t) ""))
+  (mapconcat (lambda (s) (concat "*** TODO " s "\n" (sprint--how-line s))) (split-string joined "\x1f" t) ""))
+
+(defun sprint--how-line (text)
+  "The \"How:\" body line of the exercise TEXT (its EXECUTION in the DB), or \"\".
+Indented, so the parsers of \"- Category: …\" lines and the hand-edit hash ignore it."
+  (let ((how (and sprint-show-execution (plist-get (sprint--db-match text) :how))))
+    (if (and how (not (string-empty-p how))) (format "    How: %s\n" how) "")))
+
+(defun sprint--annotate-how (text)
+  "TEXT with every exercise sub-heading followed by its current \"How:\" line.
+Old How lines are dropped first, so a changed DB shows up on the next generation."
+  (with-temp-buffer
+    (insert text)
+    (goto-char (point-min))
+    (while (re-search-forward "^[ \t]+How: .*\n?" nil t) (replace-match ""))
+    (goto-char (point-min))
+    (while (re-search-forward "^\\*\\*\\*+ \\(?:\\(?:TODO\\|NEXT\\|DONE\\|SKIPPED\\) \\)?\\(.*?\\)[ \t]*$" nil t)
+      (let ((how (sprint--how-line (match-string 1))))
+        (unless (string-empty-p how)
+          (forward-line 1)
+          ;; below the planning line and the property drawer, which org wants right under the heading
+          (while (looking-at "[ \t]*\\(?:CLOSED\\|SCHEDULED\\|DEADLINE\\):") (forward-line 1))
+          (when (looking-at "[ \t]*:PROPERTIES:")
+            (re-search-forward "^[ \t]*:END:.*\n?" nil t))
+          (unless (bolp) (insert "\n"))
+          (insert how))))
+    (buffer-string)))
 
 ;;;; Schedule generation
 
@@ -1355,7 +1387,7 @@ states survive); the current week onward is regenerated."
                                        kept)
                                texts)
                        (lambda (a b) (< (car a) (car b)))))
-        (insert (cdr c))))
+        (insert (sprint--annotate-how (cdr c)))))
     (when (buffer-live-p visiting)
       (with-current-buffer visiting (revert-buffer t t t)))
     (message "Sprint schedule: %d weeks (%d kept%s, %d generated) → %s"
@@ -1564,6 +1596,16 @@ not.  The week is locked so regeneration keeps the change."
                     (format "- %s: %s" cat (mapconcat #'identity
                                                        (mapcar (lambda (s) (if (equal s seg) text s)) segs)
                                                        "; "))))
+          ;; the How line under it now describes the new exercise
+          (when head
+            (let* ((b (line-beginning-position))
+                   (e (save-excursion (forward-line 1)
+                                      (if (re-search-forward "^\\*" nil t) (match-beginning 0) (point-max))))
+                   (new (sprint--annotate-how (buffer-substring-no-properties b e))))
+              (delete-region b e)
+              (goto-char b)
+              (insert new)
+              (goto-char b)))
           (sprint--lock-week-at-point)
           (message "%s → %s; week %d locked" seg text week-n))))))
 
@@ -3789,6 +3831,7 @@ h1{font-size:1.7rem;margin:0 0 4px}h2{font-size:1.25rem;margin:36px 0 12px}h3{fo
 .sess{padding:10px 14px 10px 12px;border-left:4px solid var(--k)}.sess+.sess{border-top:1px dashed var(--line)}
 .sess .t{font-weight:600}.badge{display:inline-block;font-size:.68rem;font-weight:700;border-radius:20px;padding:1px 8px;margin-right:6px;color:#fff;vertical-align:1px}
 .ex{margin:6px 0 0;padding:0;list-style:none;font-size:.86rem}.ex li{margin:3px 0}.ex .cat{color:var(--muted)}
+.ex .how{font-size:.8rem;color:var(--muted);margin:1px 0 4px}.ex .how summary{cursor:pointer;width:max-content}
 .ex .tg{color:var(--muted);font-size:.8rem}.target{color:var(--high);font-weight:600}
 footer{margin-top:40px;color:var(--muted);font-size:.8rem}
 a{color:inherit}.tl-wk,.chip,.cal-wk a{text-decoration:none}.code,.wk-short{display:none}
@@ -3928,11 +3971,16 @@ a{color:inherit}.tl-wk,.chip,.cal-wk a{text-decoration:none}.code,.wk-short{disp
                           (cond ((string-match "\\`- Targets: \\(.*\\)" l)
                                  (format "<li class=\"tg\">Volume: %s</li>" (sprint--h (match-string 1 l))))
                                 ((string-match "\\`- \\([^:]+\\): \\(.*\\)" l)
-                                 (format "<li><span class=\"cat\">%s:</span> %s</li>" (sprint--h (match-string 1 l))
-                                         (replace-regexp-in-string
-                                          "· target \\(~?[0-9.]+ s\\)\\(.*?\\)\\(;\\|$\\)"
-                                          "· <span class=\"target\">target \\1</span>\\2\\3"
-                                          (sprint--h (match-string 2 l)))))
+                                 (let* ((cat (match-string 1 l)) (txt (match-string 2 l))
+                                        (how (and sprint-show-execution (plist-get (sprint--db-match txt) :how))))
+                                   (format "<li><span class=\"cat\">%s:</span> %s%s</li>" (sprint--h cat)
+                                           (replace-regexp-in-string
+                                            "· target \\(~?[0-9.]+ s\\)\\(.*?\\)\\(;\\|$\\)"
+                                            "· <span class=\"target\">target \\1</span>\\2\\3"
+                                            (sprint--h txt))
+                                           (if (and how (not (string-empty-p how)))
+                                               (format "<details class=\"how\"><summary>how</summary>%s</details>" (sprint--h how))
+                                             ""))))
                                 (t "")))
                         (plist-get s :lines) "")
                        "</ul></div>"))))
@@ -3952,6 +4000,7 @@ no readiness, no internal properties.  Returns the file name."
    (list (let ((a (string-trim (sprint--ask "Weeks to share (RET = whole season; e.g. 1-10, PH1): "))))
            (and (not (string-empty-p a)) a))))
   (let* ((year (or year (sprint-season)))
+         (sprint--db nil)
          (cfg (sprint-config year))
          (range (and spec (sprint--resolve-weeks spec year)))
          (all (sprint--export-weeks year))
