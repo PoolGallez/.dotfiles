@@ -1725,9 +1725,12 @@ rarely needed by hand:
   chains, so closing a task you were not timing never starts a clock on its
   neighbour, and closing a whole session never clocks in tomorrow's.
 
-Only state changes you make yourself count (=C-c C-t=, =SPC o t=, shift
-arrows, the agenda, the menu below): code that sets states in bulk, like the
-sprint log form ticking off every exercise on save, leaves the clock alone.
+Every state change counts, however it is made (=C-c C-t=, =SPC o t=, shift
+arrows, the agenda, the menu below), except those of the sprint commands
+(=glz/org-clock-bulk-command-re=): the log form ticks off every exercise on
+save, which must not run the chain through the session.  =org-clock= is
+loaded on the first state change: Org only loads it on the first manual
+clock-in, and without it a fresh Emacs changed the state but never clocked.
 
 =glz/org-todo-menu= shows the TODO states of the entry at point (the file's
 own =#+SEQ_TODO= ones, e.g. SKIPPED in the sprint schedule) plus /Clock in/
@@ -1738,15 +1741,17 @@ on the button, a tap on the state.
 (defvar glz/org-clock-in-states '("IN WORK")
   "TODO states that clock the entry in when it enters them.")
 
-(defvar glz/org-clock-state-commands
-  '(org-todo org-agenda-todo org-shiftright org-shiftleft
-    org-agenda-todo-nextset org-agenda-todo-previousset glz/org-todo-menu)
-  "Commands whose state changes drive the automatic clock.
-Other callers of `org-todo' (code changing states in bulk) do not.")
+(defvar glz/org-clock-bulk-command-re "\\`sprint-"
+  "State changes made by commands matching this regexp leave the clock alone.
+They set many states at once (the sprint log form ticking off every exercise on
+save), which must not run the chain through the whole session.")
 
 (defun glz/org-clocking-here-p ()
   "Non-nil when the running clock is in the entry at point (its CLOCK line).
 Indirect buffers (e.g. the sprint \"today\" view) count as their base buffer."
+  ;; `org-clocking-p' is not autoloaded: org-clock.el is only loaded by the
+  ;; first manual clock-in, so a fresh Emacs would fail here without this.
+  (require 'org-clock)
   (let ((base (lambda (b) (or (buffer-base-buffer b) b))))
     (and (org-clocking-p)
          (eq (funcall base (marker-buffer org-clock-marker)) (funcall base (current-buffer)))
@@ -1768,7 +1773,8 @@ Indirect buffers (e.g. the sprint \"today\" view) count as their base buffer."
 (defun glz/org-auto-clock ()
   "Clock in on `glz/org-clock-in-states', out on leaving the clocked entry, chain on DONE.
 Runs from `org-after-todo-state-change-hook' (point on the changed entry)."
-  (when (memq this-command glz/org-clock-state-commands)
+  (unless (and (symbolp this-command)
+               (string-match-p glz/org-clock-bulk-command-re (symbol-name this-command)))
     (save-excursion
       (org-back-to-heading t)
       (let ((here (glz/org-clocking-here-p)))

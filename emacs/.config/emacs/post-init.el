@@ -1142,15 +1142,17 @@ In every other state KEY keeps its current `org-mode-map' binding."
 (defvar glz/org-clock-in-states '("IN WORK")
   "TODO states that clock the entry in when it enters them.")
 
-(defvar glz/org-clock-state-commands
-  '(org-todo org-agenda-todo org-shiftright org-shiftleft
-    org-agenda-todo-nextset org-agenda-todo-previousset glz/org-todo-menu)
-  "Commands whose state changes drive the automatic clock.
-Other callers of `org-todo' (code changing states in bulk) do not.")
+(defvar glz/org-clock-bulk-command-re "\\`sprint-"
+  "State changes made by commands matching this regexp leave the clock alone.
+They set many states at once (the sprint log form ticking off every exercise on
+save), which must not run the chain through the whole session.")
 
 (defun glz/org-clocking-here-p ()
   "Non-nil when the running clock is in the entry at point (its CLOCK line).
 Indirect buffers (e.g. the sprint \"today\" view) count as their base buffer."
+  ;; `org-clocking-p' is not autoloaded: org-clock.el is only loaded by the
+  ;; first manual clock-in, so a fresh Emacs would fail here without this.
+  (require 'org-clock)
   (let ((base (lambda (b) (or (buffer-base-buffer b) b))))
     (and (org-clocking-p)
          (eq (funcall base (marker-buffer org-clock-marker)) (funcall base (current-buffer)))
@@ -1172,7 +1174,8 @@ Indirect buffers (e.g. the sprint \"today\" view) count as their base buffer."
 (defun glz/org-auto-clock ()
   "Clock in on `glz/org-clock-in-states', out on leaving the clocked entry, chain on DONE.
 Runs from `org-after-todo-state-change-hook' (point on the changed entry)."
-  (when (memq this-command glz/org-clock-state-commands)
+  (unless (and (symbolp this-command)
+               (string-match-p glz/org-clock-bulk-command-re (symbol-name this-command)))
     (save-excursion
       (org-back-to-heading t)
       (let ((here (glz/org-clocking-here-p)))
