@@ -112,16 +112,11 @@ Plist keys: :name :type :bits :rows :cols :header-pos."
               (re-search-backward canape-par--header-re nil t))
       ;; Capture match data BEFORE parse-annotation calls string-match,
       ;; which would overwrite the global match data with string offsets.
-      (let* ((header-pos (match-beginning 0))
-             (name    (match-string-no-properties 1))
-             (annot   (match-string-no-properties 2))
-             (parsed  (canape-par--parse-annotation annot)))
-        (list :name       name
-              :type       (plist-get parsed :type)
-              :bits       (plist-get parsed :bits)
-              :rows       (plist-get parsed :rows)
-              :cols       (plist-get parsed :cols)
-              :header-pos header-pos)))))
+      (let ((header-pos (match-beginning 0))
+            (name       (match-string-no-properties 1))
+            (annot      (match-string-no-properties 2)))
+        (append (list :name name :header-pos header-pos)
+                (canape-par--parse-annotation annot))))))
 
 (defun canape-par--collect-values (header-pos count)
   "Collect up to COUNT value lines immediately after HEADER-POS.
@@ -151,70 +146,6 @@ Returns a list of (RAW-STRING . REAL-STRING) pairs."
   (if (> (length s) canape-par--max-cell-width)
       (concat (substring s 0 (- canape-par--max-cell-width 1)) "…")
     s))
-
-(defun canape-par--col-widths (rows cols values getter)
-  "Compute per-column display widths for a ROWS×COLS grid.
-Returns a list of COLS integers, each at least as wide as its column header."
-  (cl-loop for c from 0 below cols collect
-           (apply #'max
-                  (length (format "Col %d" (1+ c)))
-                  (cl-loop for r from 0 below rows
-                           for i = (+ (* r cols) c)
-                           collect (length (canape-par--trunc
-                                            (if (< i (length values))
-                                                (funcall getter (nth i values))
-                                              "—")))))))
-
-(defun canape-par--table-string (rows cols values getter &optional numeric col-widths)
-  "Render VALUES as a ROWS×COLS ASCII table.
-GETTER extracts the display string from each (RAW . REAL) pair.
-NUMERIC non-nil → right-align cells; nil → left-align.
-COL-WIDTHS, if supplied, overrides the per-column width calculation so that
-two tables sharing the same COL-WIDTHS list stay visually aligned."
-  (let* ((grid
-          (cl-loop for r from 0 below rows collect
-                   (cl-loop for c from 0 below cols
-                            for i = (+ (* r cols) c)
-                            collect (canape-par--trunc
-                                     (if (< i (length values))
-                                         (funcall getter (nth i values))
-                                       "—")))))
-         (col-widths (or col-widths (canape-par--col-widths rows cols values getter)))
-         (row-lw
-          (apply #'max 5
-                 (cl-loop for r from 1 to rows collect
-                          (length (format "Row %d" r)))))
-         (pad (if numeric
-                  (lambda (s w) (concat (make-string (max 0 (- w (length s))) ?\s) s))
-                (lambda (s w) (concat s (make-string (max 0 (- w (length s))) ?\s)))))
-         (rpad (lambda (s w) (concat (make-string (max 0 (- w (length s))) ?\s) s)))
-         lines)
-    ;; ── Column header ─────────────────────────────────────────────────────────
-    (push (concat (make-string row-lw ?\s) " │ "
-                  (mapconcat
-                   (lambda (c)
-                     (funcall rpad (format "Col %d" (1+ c)) (nth c col-widths)))
-                   (number-sequence 0 (1- cols)) " │ ")
-                  " │")
-          lines)
-    ;; ── Separator ─────────────────────────────────────────────────────────────
-    (push (concat (make-string row-lw ?─) "─┼─"
-                  (mapconcat (lambda (c) (make-string (nth c col-widths) ?─))
-                             (number-sequence 0 (1- cols)) "─┼─")
-                  "─┤")
-          lines)
-    ;; ── Data rows ─────────────────────────────────────────────────────────────
-    (cl-loop for r from 0 below rows do
-             (push (concat
-                    (funcall rpad (format "Row %d" (1+ r)) row-lw)
-                    " │ "
-                    (mapconcat
-                     (lambda (c)
-                       (funcall pad (nth c (nth r grid)) (nth c col-widths)))
-                     (number-sequence 0 (1- cols)) " │ ")
-                    " │")
-                   lines))
-    (mapconcat #'identity (nreverse lines) "\n")))
 
 (defun canape-par--numeric-values-p (values getter)
   "Return non-nil when every value extracted by GETTER looks like a number."
@@ -268,6 +199,38 @@ COL-WIDTHS overrides computed column widths for cross-table alignment."
                     " │")
                    lines))
     (mapconcat #'identity (nreverse lines) "\n")))
+
+(defun canape-par--show-popup (name header row-labels col-labels
+                                    real-grid real-numeric raw-grid stored-raw)
+  "Show REAL-GRID and RAW-GRID as two aligned tables in *CANAPE: NAME*.
+HEADER is inserted first.  REAL-NUMERIC right-aligns the real-world table
+\(raw values are always right-aligned).  STORED-RAW is the raw grid kept
+for the binary toggle."
+  (let ((buf (get-buffer-create (format "*CANAPE: %s*" name)))
+        ;; Unified column widths so both tables stay aligned
+        (widths (cl-mapcar #'max
+                           (canape-par--grid-col-widths col-labels real-grid)
+                           (canape-par--grid-col-widths col-labels raw-grid))))
+    (with-current-buffer buf
+      (let ((inhibit-read-only t))
+        (erase-buffer)
+        (insert header
+                "Real-world values:\n\n"
+                (canape-par--render-grid row-labels col-labels
+                                         real-grid real-numeric widths)
+                "\n\nRaw (stored) values:\n\n"
+                (canape-par--render-grid row-labels col-labels raw-grid t widths)
+                "\n\n[q] close  [TAB] section  [n/p] rows  [f/b] cols  [B] binary\n"))
+      (canape-par-table-mode)
+      (setq-local canape-par-table--raw-grid   stored-raw)
+      (setq-local canape-par-table--row-labels row-labels)
+      (setq-local canape-par-table--col-labels col-labels)
+      (canape-par-table--goto-first-cell))
+    ;; Show below the current window; fit height to content (max 25 lines)
+    (pop-to-buffer buf '((display-buffer-below-selected)))
+    (when-let* ((win (get-buffer-window buf)))
+      (with-selected-window win
+        (fit-window-to-buffer win 25 8)))))
 
 ;;; ── Structured inline format: BASE._IDX_LABEL._FIELD [TYPE] VALUE ; COMMENT ─
 
@@ -349,39 +312,18 @@ Returns plists (:index :label :field :value :comment) sorted by index."
                                                "—"))))))
              (val-grid     (funcall mk-grid val-lookup))
              (comment-grid (funcall mk-grid comment-lookup))
-             ;; Unified column widths so both tables stay aligned
-             (widths (cl-mapcar #'max
-                                (canape-par--grid-col-widths col-labels val-grid)
-                                (canape-par--grid-col-widths col-labels comment-grid)))
              ;; Alignment: raw values always numeric; comments only when all numeric
              (comment-numeric
               (cl-every (lambda (row)
                           (cl-every (lambda (v) (string-match-p "^-?[0-9]" v)) row))
-                        comment-grid))
-             (buf (get-buffer-create (format "*CANAPE: %s*" base))))
-        (with-current-buffer buf
-          (let ((inhibit-read-only t))
-            (erase-buffer)
-            (insert (format "Parameter group: %s\n" base))
-            (insert (format "Structure:       %d row%s × %d field%s\n\n"
-                            (length row-keys) (if (= (length row-keys) 1) "" "s")
-                            (length col-keys) (if (= (length col-keys) 1) "" "s")))
-            (insert "Real-world values:\n\n")
-            (insert (canape-par--render-grid row-labels col-labels
-                                             comment-grid comment-numeric widths))
-            (insert "\n\nRaw (stored) values:\n\n")
-            (insert (canape-par--render-grid row-labels col-labels
-                                             val-grid t widths))
-            (insert "\n\n[q] close  [TAB] section  [n/p] rows  [f/b] cols  [B] binary\n"))
-          (canape-par-table-mode)
-          (setq-local canape-par-table--raw-grid   val-grid)
-          (setq-local canape-par-table--row-labels row-labels)
-          (setq-local canape-par-table--col-labels col-labels)
-          (canape-par-table--goto-first-cell))
-        (pop-to-buffer buf '((display-buffer-below-selected)))
-        (when-let ((win (get-buffer-window buf)))
-          (with-selected-window win
-            (fit-window-to-buffer win 25 8)))))))
+                        comment-grid)))
+        (canape-par--show-popup
+         base
+         (format "Parameter group: %s\nStructure:       %d row%s × %d field%s\n\n"
+                 base
+                 (length row-keys) (if (= (length row-keys) 1) "" "s")
+                 (length col-keys) (if (= (length col-keys) 1) "" "s"))
+         row-labels col-labels comment-grid comment-numeric val-grid val-grid)))))
 
 ;;; ── Table popup command ──────────────────────────────────────────────────────
 
@@ -406,46 +348,30 @@ Detects format automatically:
            (total (* rows cols))
            (vals  (canape-par--collect-values hpos total))
            (found (length vals))
-           ;; Unified column widths: element-wise max of both tables so that
-           ;; the two grids stay visually aligned for easy comparison.
-           (widths (cl-mapcar #'max
-                              (canape-par--col-widths rows cols vals #'cdr)
-                              (canape-par--col-widths rows cols vals #'car)))
+           ;; ROWS×COLS grid of GETTER applied to each (RAW . REAL) pair,
+           ;; truncated, with — for values missing from the file.
+           (mk-grid (lambda (getter)
+                      (cl-loop for r from 0 below rows collect
+                               (cl-loop for c from 0 below cols
+                                        for v = (nth (+ (* r cols) c) vals)
+                                        collect (canape-par--trunc
+                                                 (if v (funcall getter v) "—"))))))
            ;; Right-align real-world values only when they are all numeric
-           (real-numeric (canape-par--numeric-values-p vals #'cdr))
-           (buf   (get-buffer-create (format "*CANAPE: %s*" name))))
-      (with-current-buffer buf
-        (let ((inhibit-read-only t))
-          (erase-buffer)
-          (insert (format "Parameter:  %s\n" name))
-          (insert (format "Type:       %s(%d)   Dimensions: %d × %d"
-                          type bits rows cols))
-          (when (< found total)
-            (insert (format "  [only %d/%d values found]" found total)))
-          (insert "\n\n")
-          ;; Real-world values — right-aligned when numeric, left when text labels
-          (insert "Real-world values:\n\n")
-          (insert (canape-par--table-string rows cols vals #'cdr real-numeric widths))
-          (insert "\n\n")
-          ;; Raw (stored) values — right-aligned (always numeric), same widths
-          (insert "Raw (stored) values:\n\n")
-          (insert (canape-par--table-string rows cols vals #'car t widths))
-          (insert "\n\n[q] close  [TAB] section  [n/p] rows  [f/b] cols  [B] binary\n"))
-        (canape-par-table-mode)
-        (setq-local canape-par-table--raw-grid
-                    (cl-loop for r from 0 below rows collect
-                             (cl-loop for c from 0 below cols collect
-                                      (car (nth (+ (* r cols) c) vals)))))
-        (setq-local canape-par-table--row-labels
-                    (cl-loop for r from 1 to rows collect (format "Row %d" r)))
-        (setq-local canape-par-table--col-labels
-                    (cl-loop for c from 1 to cols collect (format "Col %d" c)))
-        (canape-par-table--goto-first-cell))
-      ;; Show below the current window; fit height to content (max 25 lines)
-      (pop-to-buffer buf '((display-buffer-below-selected)))
-      (when-let ((win (get-buffer-window buf)))
-        (with-selected-window win
-          (fit-window-to-buffer win 25 8))))))))
+           (real-numeric (canape-par--numeric-values-p vals #'cdr)))
+      (canape-par--show-popup
+       name
+       (concat (format "Parameter:  %s\nType:       %s(%d)   Dimensions: %d × %d"
+                       name type bits rows cols)
+               (if (< found total)
+                   (format "  [only %d/%d values found]" found total)
+                 "")
+               "\n\n")
+       (cl-loop for r from 1 to rows collect (format "Row %d" r))
+       (cl-loop for c from 1 to cols collect (format "Col %d" c))
+       (funcall mk-grid #'cdr) real-numeric (funcall mk-grid #'car)
+       (cl-loop for r from 0 below rows collect
+                (cl-loop for c from 0 below cols collect
+                         (car (nth (+ (* r cols) c) vals))))))))))
 
 ;;; ── Table popup navigation mode ─────────────────────────────────────────────
 
@@ -457,6 +383,10 @@ Detects format automatically:
   "Column label strings for the current popup (set at render time).")
 (defvar-local canape-par-table--binary-p nil
   "Non-nil when the raw section is currently showing binary values.")
+
+(defconst canape-par-table--section-re
+  "^\\(?:Real-world values\\|Raw (stored) values\\)"
+  "Match the heading line of either table section in the popup.")
 
 (defun canape-par-table--data-row-p ()
   "Non-nil if the current line is a data row (│ present, ┼ absent, label non-blank)."
@@ -488,7 +418,7 @@ Detects format automatically:
   "0-based index of the current data row within its section."
   (let ((target (line-number-at-pos)) (idx 0))
     (save-excursion
-      (when (re-search-backward "^\\(?:Real-world values\\|Raw (stored) values\\)" nil t)
+      (when (re-search-backward canape-par-table--section-re nil t)
         (forward-line 1)
         (while (and (not (eobp)) (not (canape-par-table--data-row-p)))
           (forward-line 1))
@@ -544,13 +474,13 @@ Detects format automatically:
          (row      (canape-par-table--row-offset))
          (here-hdr (save-excursion
                      (re-search-backward
-                      "^\\(?:Real-world values\\|Raw (stored) values\\)" nil t)))
+                      canape-par-table--section-re nil t)))
          (other    (when here-hdr
                      (save-excursion
                        (goto-char (point-min))
                        (let (found)
                          (while (re-search-forward
-                                 "^\\(?:Real-world values\\|Raw (stored) values\\)" nil t)
+                                 canape-par-table--section-re nil t)
                            (unless (= (match-beginning 0) here-hdr)
                              (setq found (match-beginning 0))))
                          found)))))
@@ -597,7 +527,7 @@ retain their sign (e.g. -3 → -0b11)."
     (unless region (user-error "No raw values section found"))
     (let ((in-raw (save-excursion
                     (when (re-search-backward
-                           "^\\(?:Real-world values\\|Raw (stored) values\\)" nil t)
+                           canape-par-table--section-re nil t)
                       (string-match-p "^Raw" (match-string 0)))))
           (cur-col (if (canape-par-table--data-row-p) (canape-par-table--col-at-point) 0))
           (cur-row (if (canape-par-table--data-row-p) (canape-par-table--row-offset) 0)))
@@ -636,7 +566,7 @@ retain their sign (e.g. -3 → -0b11)."
 (defun canape-par-table--goto-first-cell ()
   "Place point on the first data cell of the first table section."
   (goto-char (point-min))
-  (when (re-search-forward "^\\(?:Real-world values\\|Raw (stored) values\\)" nil t)
+  (when (re-search-forward canape-par-table--section-re nil t)
     (while (and (not (eobp)) (not (canape-par-table--data-row-p)))
       (forward-line 1))
     (when (canape-par-table--data-row-p)
@@ -690,8 +620,7 @@ Commands:
   (setq-local font-lock-defaults  '(canape-par-font-lock-keywords))
   (setq-local comment-start       "; ")
   (setq-local comment-end         "")
-  (setq-local imenu-create-index-function #'canape-par--imenu-index)
-  (font-lock-mode 1))
+  (setq-local imenu-create-index-function #'canape-par--imenu-index))
 
 ;;; ── Auto-mode registration ───────────────────────────────────────────────────
 
