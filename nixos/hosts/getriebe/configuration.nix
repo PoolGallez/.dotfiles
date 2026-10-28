@@ -29,14 +29,11 @@
 
   # For Gpd, package to enable automatic screen rotation
   hardware.sensor.iio.enable = true;
-  # The ACPI mount matrix of the accelerometer follows the panel's native
-  # portrait axes, not the landscape ones after panel_orientation, so the
-  # desktop saw "right-up" with the lid open normally. Rotated by 90°, as
-  # 60-sensor.hwdb asks for rotated panels.
-  services.udev.extraHwdb = ''
-    sensor:modalias:acpi:MXC6655*:dmi:*:svnGPD:pnG1628-04:*
-     ACCEL_MOUNT_MATRIX=-1, 0, 0; 0, 1, 0; 0, 0, -1
-  '';
+  # No ACCEL_MOUNT_MATRIX override: the ACPI one (0,1,0; 1,0,0; 0,0,-1)
+  # follows the panel's native portrait axes, which is what 60-sensor.hwdb
+  # asks for with rotated panels — the sensor reads "right-up" with the lid
+  # open normally, and mutter adds the panel_orientation on top. A
+  # landscape-axes matrix here makes tablet-mode rotation 90° off.
 
   # No hardware tablet-mode switch on the GPD: derive one from the
   # accelerometer, so GNOME/Plasma know when to offer the on-screen keyboard.
