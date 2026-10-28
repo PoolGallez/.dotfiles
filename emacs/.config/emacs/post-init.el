@@ -439,8 +439,8 @@ Before any graphical frame exists (a daemon starting up), PREFERRED."
 (use-package vertico
   :custom
   (vertico-scroll-margin 0)
-  (vertico-count 20)
-  (vertico-resize t)
+  (vertico-count (if (eq glz/platform 'android) 10 15))
+  (vertico-resize nil)
   (vertico-cycle t)
   :bind (:map vertico-map
               ("C-j" . vertico-next)
@@ -450,10 +450,36 @@ Before any graphical frame exists (a daemon starting up), PREFERRED."
   :init
   (vertico-mode t))
 
+(use-package vertico-directory
+  :ensure nil                           ; bundled with vertico
+  :after vertico
+  :bind (:map vertico-map
+              ("RET" . vertico-directory-enter)
+              ("DEL" . vertico-directory-delete-char)
+              ("M-DEL" . vertico-directory-delete-word))
+  :hook (rfn-eshadow-update-overlay . vertico-directory-tidy))
+
+(use-package vertico-repeat
+  :ensure nil                           ; bundled with vertico
+  :after vertico
+  :hook (minibuffer-setup . vertico-repeat-save)
+  :config
+  (with-eval-after-load 'savehist
+    (add-to-list 'savehist-additional-variables 'vertico-repeat-history)))
+
+(with-eval-after-load 'meow
+  (meow-leader-define-key '("r" . vertico-repeat)))
+
+(minibuffer-depth-indicate-mode 1)
+(setq completion-ignore-case t
+      read-file-name-completion-ignore-case t
+      read-buffer-completion-ignore-case t)
+
 (use-package orderless
   :custom
   (completion-styles '(orderless basic))
-  (completion-category-overrides '((file (styles partial-completion))))
+  ;; basic first: exact paths and TRAMP hosts (/ssh:host:) complete too.
+  (completion-category-overrides '((file (styles basic partial-completion))))
   (completion-category-defaults nil)
   (completion-pcm-leading-wildcard t))
 
@@ -900,6 +926,23 @@ In every other state KEY keeps its current `org-mode-map' binding."
                     (interactive)
                     (call-interactively
                      (if (bound-and-true-p meow-normal-mode) normal-cmd fallback))))))
+
+  ;; Checklists like a phone notes app, in Meow insert state only (other
+  ;; states keep `org-return'): RET at the end of a checkbox item
+  ;; starts a new "- [ ] " item, RET on an empty one removes it and ends the
+  ;; list.  Bound before the Meow wrapper below, which keeps it as the
+  ;; insert-state RET.
+  (defun glz/org-checkbox-return ()
+    "Continue a checklist on RET, or end it on an empty item; else `org-return'."
+    (interactive)
+    (cond
+     ((not (and (bound-and-true-p meow-insert-mode) (eolp) (org-at-item-checkbox-p)))
+      (org-return))
+     ((save-excursion (beginning-of-line) (looking-at-p "[ \t]*[-+*] \\[.\\][ \t]*$"))
+      (delete-region (line-beginning-position) (point))
+      (org-update-checkbox-count-maybe))
+     (t (org-insert-item t))))
+  (keymap-set org-mode-map "RET" #'glz/org-checkbox-return)
 
   (glz/org-meow-normal-key "RET" #'glz/org-dwim-at-point)
   (glz/org-meow-normal-key "C-j" #'org-next-visible-heading)
@@ -2080,7 +2123,8 @@ not immediately undone."
     "t" "toggles"
     "o" "org"
     "w" "windows"
-    "f" "frames")
+    "f" "frames"
+    "r" "resume minibuffer")
 
   (which-key-add-keymap-based-replacements glz/window-map
     "h" "← left"      "j" "↓ down"       "k" "↑ up"         "l" "→ right"

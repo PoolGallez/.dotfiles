@@ -1140,9 +1140,10 @@ Old How lines are dropped first, so a changed DB shows up on the next generation
       (let ((how (sprint--how-line (match-string 1))))
         (unless (string-empty-p how)
           (forward-line 1)
-          ;; below the planning line and the property drawer, which org wants right under the heading
+          ;; below the planning line and the drawers (properties, logbook with the clock
+          ;; lines), which org wants right under the heading
           (while (looking-at "[ \t]*\\(?:CLOSED\\|SCHEDULED\\|DEADLINE\\):") (forward-line 1))
-          (when (looking-at "[ \t]*:PROPERTIES:")
+          (while (looking-at "[ \t]*:[A-Za-z_-]+:[ \t]*$")
             (re-search-forward "^[ \t]*:END:.*\n?" nil t))
           (unless (bolp) (insert "\n"))
           (insert how))))

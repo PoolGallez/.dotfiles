@@ -47,6 +47,7 @@ which-key shows what is available after each prefix.
 | SPC f   | frames                 | new/delete/other frame, fullscreen                       |
 | SPC t   | toggles                | line numbers, text scale                                 |
 | SPC p   | project.el             | C-x p prefix                                             |
+| SPC r   | vertico-repeat         | reopen the last minibuffer (search, M-x, ...) as it was  |
 | SPC s   | eshell                 |                                                          |
 | SPC c   | open this file         | Config.org                                               |
 | SPC ?   | cheatsheet             | Meow's key cheatsheet                                    |
@@ -979,12 +980,24 @@ store.
 #+end_src
 *** Completion framework
 **** Vertico
+The minibuffer has a fixed height (=vertico-resize= nil): it no longer grows
+and shrinks with the number of candidates, so the prompt stays put.  It is
+lower on the phone, where the soft keyboard already covers half the screen.
+
+- *Files* (=vertico-directory=): =RET= on a directory enters it, =DEL= deletes
+  a whole path component, =M-DEL= a word; typing =~/= or =/= after a path
+  drops the old part.
+- *Resume* (=vertico-repeat=): =SPC r= reopens the last minibuffer session
+  with the same input and selection (e.g. a =consult-ripgrep= list after
+  visiting a hit).  Saved by savehist, so it survives restarts.
+- *Nested prompts* show their depth (=[2]=), since recursive minibuffers are on.
+- File and buffer names complete ignoring case (=~/doc= finds =~/Documents=).
 #+begin_src emacs-lisp
 (use-package vertico
   :custom
   (vertico-scroll-margin 0)
-  (vertico-count 20)
-  (vertico-resize t)
+  (vertico-count (if (eq glz/platform 'android) 10 15))
+  (vertico-resize nil)
   (vertico-cycle t)
   :bind (:map vertico-map
               ("C-j" . vertico-next)
@@ -993,13 +1006,39 @@ store.
               ("C-M-k" . vertico-previous-group))
   :init
   (vertico-mode t))
+
+(use-package vertico-directory
+  :ensure nil                           ; bundled with vertico
+  :after vertico
+  :bind (:map vertico-map
+              ("RET" . vertico-directory-enter)
+              ("DEL" . vertico-directory-delete-char)
+              ("M-DEL" . vertico-directory-delete-word))
+  :hook (rfn-eshadow-update-overlay . vertico-directory-tidy))
+
+(use-package vertico-repeat
+  :ensure nil                           ; bundled with vertico
+  :after vertico
+  :hook (minibuffer-setup . vertico-repeat-save)
+  :config
+  (with-eval-after-load 'savehist
+    (add-to-list 'savehist-additional-variables 'vertico-repeat-history)))
+
+(with-eval-after-load 'meow
+  (meow-leader-define-key '("r" . vertico-repeat)))
+
+(minibuffer-depth-indicate-mode 1)
+(setq completion-ignore-case t
+      read-file-name-completion-ignore-case t
+      read-buffer-completion-ignore-case t)
 #+end_src
 **** Orderless
 #+begin_src emacs-lisp
 (use-package orderless
   :custom
   (completion-styles '(orderless basic))
-  (completion-category-overrides '((file (styles partial-completion))))
+  ;; basic first: exact paths and TRAMP hosts (/ssh:host:) complete too.
+  (completion-category-overrides '((file (styles basic partial-completion))))
   (completion-category-defaults nil)
   (completion-pcm-leading-wildcard t))
 #+end_src
@@ -1473,6 +1512,23 @@ In every other state KEY keeps its current `org-mode-map' binding."
                     (interactive)
                     (call-interactively
                      (if (bound-and-true-p meow-normal-mode) normal-cmd fallback))))))
+
+  ;; Checklists like a phone notes app, in Meow insert state only (other
+  ;; states keep `org-return'): RET at the end of a checkbox item
+  ;; starts a new "- [ ] " item, RET on an empty one removes it and ends the
+  ;; list.  Bound before the Meow wrapper below, which keeps it as the
+  ;; insert-state RET.
+  (defun glz/org-checkbox-return ()
+    "Continue a checklist on RET, or end it on an empty item; else `org-return'."
+    (interactive)
+    (cond
+     ((not (and (bound-and-true-p meow-insert-mode) (eolp) (org-at-item-checkbox-p)))
+      (org-return))
+     ((save-excursion (beginning-of-line) (looking-at-p "[ \t]*[-+*] \\[.\\][ \t]*$"))
+      (delete-region (line-beginning-position) (point))
+      (org-update-checkbox-count-maybe))
+     (t (org-insert-item t))))
+  (keymap-set org-mode-map "RET" #'glz/org-checkbox-return)
 
   (glz/org-meow-normal-key "RET" #'glz/org-dwim-at-point)
   (glz/org-meow-normal-key "C-j" #'org-next-visible-heading)
@@ -2057,7 +2113,7 @@ archived like a task (=SPC o w=, to =Archive.org=).
 | Key     | Action                                                         |
 |---------+----------------------------------------------------------------|
 | SPC n n | new note (first line = title; =C-c C-c= saves)                 |
-| SPC n l | new checklist: asks a title, then =- [ ]= items (=M-RET= adds) |
+| SPC n l | new checklist: asks a title, then =- [ ]= items (=RET= adds)   |
 | SPC n b | board: pinned notes, then the others; tap/RET opens one        |
 | SPC n t | notes with a label (tag)                                       |
 | SPC n p | pin / unpin the note at point                                  |
@@ -2065,7 +2121,8 @@ archived like a task (=SPC o w=, to =Archive.org=).
 
 Captures =k= (note) and =K= (checklist) are also in the =SPC o c= menu, and
 =k= / =K= (and =v= for the board) on the dashboard.  The checklist title counts the ticked items
-(=[2/5]=); tap or =RET= on an item ticks it.
+(=[2/5]=); tap or =RET= on an item ticks it.  While typing, =RET= at the end of an item adds the next
+=- [ ]= and =RET= on an empty one ends the list.
 #+begin_src emacs-lisp
 (defun glz/capture-note () "New quick note in Keep.org." (interactive) (org-capture nil "k"))
 (defun glz/capture-checklist () "New checklist in Keep.org." (interactive) (org-capture nil "K"))
@@ -2985,7 +3042,8 @@ not immediately undone."
     "t" "toggles"
     "o" "org"
     "w" "windows"
-    "f" "frames")
+    "f" "frames"
+    "r" "resume minibuffer")
 
   (which-key-add-keymap-based-replacements glz/window-map
     "h" "← left"      "j" "↓ down"       "k" "↑ up"         "l" "→ right"
