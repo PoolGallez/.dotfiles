@@ -972,23 +972,23 @@ In every other state KEY keeps its current `org-mode-map' binding."
   (setq org-log-into-drawer t)
 
   (setq org-todo-keywords
-        '((sequence "TODO(t)" "NEXT(n)" "|" "DONE(d!)")
-          (sequence "IDEA(i)" "DISCUSSION(d)" "ANALYSIS(a)" "IN WORK(w)" "|" "DONE(d!)" "CANCELLED(c!)")))
+        '((sequence "TODO(t)" "IN-WORK(w)" "|" "DONE(d!)")
+          (sequence "IDEA(i)" "DISCUSSION(s)" "ANALYSIS(a)" "|" "DONE(d!)" "CANCELLED(c!)")))
 
   (setq org-agenda-custom-commands
         '(("d" "Dashboard"
            ((agenda "" ((org-deadline-warning-days 7)))
-            (todo "NEXT"
-                  ((org-agenda-overriding-header "Next Tasks")))
+            (todo "IN-WORK"
+                  ((org-agenda-overriding-header "In Work")))
             (tags-todo "agenda/ACTIVE" ((org-agenda-overriding-header "Active Projects")))))
 
-          ("n" "Next Tasks"
-           ((todo "NEXT"
-                  ((org-agenda-overriding-header "Next Tasks")))))
+          ("n" "In Work"
+           ((todo "IN-WORK"
+                  ((org-agenda-overriding-header "In Work")))))
 
           ("W" "Work Tasks" tags-todo "+work")
 
-          ("e" tags-todo "+TODO=\"NEXT\"+Effort<15&+Effort>0"
+          ("e" tags-todo "+TODO=\"TODO\"+Effort<15&+Effort>0"
            ((org-agenda-overriding-header "Low Effort Tasks")
             (org-agenda-max-todos 20)
             (org-agenda-files org-agenda-files)))
@@ -1139,13 +1139,8 @@ In every other state KEY keeps its current `org-mode-map' binding."
   ;; The bullet symbols are chosen by glz/org-glyphs (Basic settings above).
   :hook (org-mode . org-bullets-mode))
 
-(defvar glz/org-clock-in-states '("IN WORK")
+(defvar glz/org-clock-in-states '("IN-WORK")
   "TODO states that clock the entry in when it enters them.")
-
-(defvar glz/org-clock-bulk-command-re "\\`sprint-"
-  "State changes made by commands matching this regexp leave the clock alone.
-They set many states at once (the sprint log form ticking off every exercise on
-save), which must not run the chain through the whole session.")
 
 (defun glz/org-clocking-here-p ()
   "Non-nil when the running clock is in the entry at point (its CLOCK line).
@@ -1161,41 +1156,16 @@ Indirect buffers (e.g. the sprint \"today\" view) count as their base buffer."
            (and (<= (point) org-clock-marker)
                 (> (org-with-wide-buffer (org-entry-end-position)) org-clock-marker))))))
 
-;; Org itself clocks a DONE entry out before `org-after-todo-state-change-hook'
-;; runs, so whether the entry was being clocked is noted before the change.
-(defvar glz/org--clocked-before nil
-  "Non-nil while `org-todo' runs on the entry that was being clocked.")
-
-(defun glz/org--note-clock (fn &rest args)
-  (let ((glz/org--clocked-before (ignore-errors (glz/org-clocking-here-p))))
-    (apply fn args)))
-(advice-add 'org-todo :around #'glz/org--note-clock)
-
 (defun glz/org-auto-clock ()
-  "Clock in on `glz/org-clock-in-states', out on leaving the clocked entry, chain on DONE.
-Runs from `org-after-todo-state-change-hook' (point on the changed entry)."
-  (unless (and (symbolp this-command)
-               (string-match-p glz/org-clock-bulk-command-re (symbol-name this-command)))
-    (save-excursion
-      (org-back-to-heading t)
-      (let ((here (glz/org-clocking-here-p)))
-        (cond
-         ((member org-state glz/org-clock-in-states)
-          (unless here (org-clock-in)))
-         (glz/org--clocked-before
-          (when here (org-clock-out nil t))
-          ;; the chain: the next open sibling takes over the clock
-          (when (member org-state org-done-keywords)
-            (let (next)
-              (save-excursion
-                (while (and (not next) (org-get-next-sibling))
-                  (let ((st (org-get-todo-state)))
-                    (when (and st (not (member st org-done-keywords)))
-                      (setq next (point))))))
-              (when next
-                (goto-char next)
-                (org-clock-in)
-                (message "Clocked in: %s" (org-get-heading t t t t)))))))))))
+  "Clock in on entering `glz/org-clock-in-states', out on leaving them.
+Runs from `org-after-todo-state-change-hook' (point on the changed entry).
+Org clocks a DONE entry out by itself; this also covers going back to TODO."
+  (save-excursion
+    (org-back-to-heading t)
+    (let ((here (glz/org-clocking-here-p)))
+      (cond ((member org-state glz/org-clock-in-states)
+             (unless here (org-clock-in)))
+            (here (org-clock-out nil t))))))
 
 (add-hook 'org-after-todo-state-change-hook #'glz/org-auto-clock)
 
