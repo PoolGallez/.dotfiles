@@ -350,6 +350,14 @@ default, race, train or taper (the 10-day taper table)."
   "Exercises whose EQUIPMENT matches one of these regexps are never picked."
   :type '(repeat string))
 
+(defcustom sprint-swap-after 2
+  "The weekly review proposes a SWAP once an exercise was replaced by the same one this often."
+  :type 'integer)
+
+(defcustom sprint-swap-window-weeks 3
+  "Weeks (ending with the reviewed one) in which replacements are counted for `sprint-swap-after'."
+  :type 'integer)
+
 (defcustom sprint-warmup-on-high-days t
   "Non-nil: add Warm-Up & Activation to High-CNS sessions that do not name it."
   :type 'boolean)
@@ -578,6 +586,25 @@ in the schedule, and in the shared HTML."
                  (not (member (plist-get w :type) '("TRANSITION" "DELOAD"))))
         (plist-put w :type "DELOAD"))))
   weeks)
+
+(defun sprint--swaps (week-n)
+  "Applied SWAP overrides covering WEEK-N: alist (OLD . NEW) of exercise names."
+  (let (res)
+    (dolist (o sprint--overrides (nreverse res))
+      (let ((v (plist-get o :value)))
+        (when (and (equal (plist-get o :kind) "SWAP") v (sprint--week-in o week-n)
+                   (string-match "\\`\\(.+?\\) *-> *\\(.+?\\) *\\'" v))
+          (push (cons (match-string 1 v) (match-string 2 v)) res))))))
+
+(defun sprint--apply-swaps (w picks)
+  "PICKS of week W with the exercises of its SWAP overrides replaced (when the new one is in the DB)."
+  (let ((sw (sprint--swaps (plist-get w :n))))
+    (if (null sw) picks
+      (mapcar (lambda (e)
+                (let* ((new (cdr (assoc (plist-get e :name) sw)))
+                       (ne (and new (cl-find new (sprint--db) :key (lambda (x) (plist-get x :name)) :test #'equal))))
+                  (or ne e)))
+              picks))))
 
 (defun sprint--scale-sets (vol factor)
   "VOL with its leading set count scaled by FACTOR (at least 1 set)."
@@ -1036,7 +1063,7 @@ Records the picks in `sprint--session-picks' (the caller binds it)."
                ;; rotation: nothing stays more than ROTATION_WEEKS weeks in a row while alternatives exist
                (fresh (cl-remove-if (lambda (e) (sprint--streak-blocked-p e w cfg)) pool))
                (pool (if (>= (length fresh) n) fresh pool))
-               (picks (cond (pin (sprint--pick pin (max n (length pin)) w))
+               (picks (sprint--apply-swaps w (cond (pin (sprint--pick pin (max n (length pin)) w))
                             (conf (sprint--pick conf 1 w t))
                             (t (let* ((late (sprint--late-block-p w cfg))
                                       (drawn (sprint--pick pool n w t))
@@ -1048,7 +1075,7 @@ Records the picks in `sprint--session-picks' (the caller binds it)."
                                                  (progn (push (plist-get h :name) taken)
                                                         (append h (list :up (plist-get e :name))))
                                                e)))
-                                         drawn))))))
+                                         drawn)))))))
           (when picks
             (push (sprint--as-subtodos
                           (mapconcat
@@ -2432,6 +2459,14 @@ for it (marked :acc-provisional); used only for the indications in the schedule.
                   ("SETS_DONE" . ,(and sets (sprint--format-sets sets)))
                   ("TONNAGE" . ,(and sum (format "%.0f" (plist-get sum :tonnage))))
                   ("EST_1RM" . ,(and sum (plist-get sum :est1rm) (format "%.1f" (plist-get sum :est1rm))))
+                  ("REPS_DONE" . ,(and (plist-get rec :reps-done)
+                                       (mapconcat #'number-to-string (plist-get rec :reps-done) " ")))
+                  ("DONE_SETS" . ,(plist-get rec :done))
+                  ("REPLACED_BY" . ,(plist-get rec :replaced-by))
+                  ("REPLACED_SETS" . ,(plist-get rec :replaced-sets))
+                  ;; per exercise; the session's own RPE (read by readiness) stays on the session
+                  ("EX_RPE" . ,(and (plist-get rec :ex-rpe) (number-to-string (plist-get rec :ex-rpe))))
+                  ("DURATION_MIN" . ,(and (plist-get rec :minutes) (number-to-string (plist-get rec :minutes))))
                   ("NOTE" . ,(plist-get rec :note)))))
     (concat (make-string level ?*) " " (plist-get item :name) "\n:PROPERTIES:\n"
             (mapconcat (lambda (p) (and (cdr p) (not (string-empty-p (cdr p)))
@@ -2447,7 +2482,15 @@ for it (marked :acc-provisional); used only for the indications in the schedule.
     (with-current-buffer (find-file-noselect (sprint-file 'log year))
       (org-with-wide-buffer
        (org-datetree-find-date-create (calendar-gregorian-from-absolute abs))
-       (let ((level (1+ (org-current-level))))
+       (let ((level (1+ (org-current-level))) (day (point)))
+         ;; the same session logged again (a save retried after an error) replaces the old entry
+         (let ((end (save-excursion (org-end-of-subtree t t) (point))) olds)
+           (while (re-search-forward (format "^%s Session " (regexp-quote (make-string level ?*))) end t)
+             (when (equal (org-entry-get nil "PLANNED") plan-heading) (push (line-beginning-position) olds)))
+           (dolist (b olds)
+             (goto-char b)
+             (delete-region b (save-excursion (org-end-of-subtree t t) (point)))))
+         (goto-char day)
          (org-end-of-subtree t t)
          (unless (bolp) (insert "\n"))
          (let ((beg (point)))
@@ -2523,8 +2566,9 @@ for it (marked :acc-provisional); used only for the indications in the schedule.
              (mapconcat (lambda (st) (format "%d %s" (cl-count st recs :key (lambda (r) (plist-get r :status)) :test #'equal) st))
                         '("DONE" "MODIFIED" "SKIPPED") ", "))))
 
-;; Log form (phone-friendly): one buffer with every planned exercise, filled in
-;; at your pace and saved as a draft in the Emacs directory until you save it.
+;; Log form (phone-friendly): one buffer with every planned exercise as a table
+;; filled in with the plan, edited at your pace and kept as a synced draft
+;; (drafts/ beside the sprint files) until you save it.
 
 
 (defvar-local sprint--form-key nil "\"DATE | CONTENT\" of the session a log form belongs to.")
@@ -2539,11 +2583,29 @@ for it (marked :acc-provisional); used only for the indications in the schedule.
 
 (add-hook 'org-capture-mode-hook #'sprint--capture-insert-state)
 
-(defun sprint--log-draft-file ()
-  "Where an unsaved log form is kept (local to this device, not synced)."
-  (if (fboundp (quote no-littering-expand-var-file-name))
-      (no-littering-expand-var-file-name "sprint-log-draft.org")
-    (locate-user-emacs-file "sprint-log-draft.org")))
+(defcustom sprint-log-draft-directory nil
+  "Where unsaved log forms are kept, one file per session.
+nil = the drafts/ folder beside the sprint files.  It is synced with them, so a
+form started on the phone continues on the PC (and back) with SPC o S L."
+  :type '(choice (const :tag "drafts/ beside the sprint files" nil) directory))
+
+(defun sprint--log-draft-file (key)
+  "Draft file of the log form of the session KEY (\"DATE | CONTENT\")."
+  (expand-file-name (format "log_%s_%s.org" (substring key 0 10) (substring (md5 key) 0 6))
+                    (or sprint-log-draft-directory (expand-file-name "drafts/" sprint-directory))))
+
+(defun sprint--fresh-buffer (file)
+  "Buffer visiting FILE, re-read first when it changed on disk (e.g. synced from the phone).
+Never asks; a buffer that is stale and also has unsaved changes is an error."
+  (let ((b (get-file-buffer file)))
+    (if (null b) (find-file-noselect file)
+      (with-current-buffer b
+        (unless (or (not (file-exists-p file)) (verify-visited-file-modtime b))
+          (if (buffer-modified-p)
+              (user-error "%s changed on disk and has unsaved changes here: save or revert it first"
+                          (file-name-nondirectory file))
+            (revert-buffer t t t))))
+      b)))
 
 (defun sprint--session-items (s abs year sched)
   "Planned items of session S on day ABS, with their target times."
@@ -2556,30 +2618,68 @@ for it (marked :acc-provisional); used only for the indications in the schedule.
 
 (defconst sprint--form-session-fields
   '(("CMJ" "CMJ (cm)" "") ("RPE" "RPE (1-10)" "") ("SORENESS" "Soreness (none/mild/acute)" "none")
-    ("DURATION_MIN" "Duration (min)" ""))
+    ("DURATION_MIN" "Duration (min, empty = from the clock)" ""))
   "Session fields of the log form: (PROPERTY LABEL DEFAULT).")
+
+;; Each exercise of the form is a small table filled in with the plan, one row
+;; per set (or per rep for timed runs): only what differed is typed.  A deleted
+;; row is a set not done, an empty time a rep run but not timed.
+
+(defun sprint--form-kind (item)
+  "How ITEM is logged: `timed' (a time per rep), `lift' (kg and reps per set),
+`sets' (one cell per set) or `plain' (one line)."
+  (cond ((plist-get item :timed) 'timed)
+        ((and (plist-get item :sets) (string-prefix-p "Strength" (or (plist-get item :cat) ""))) 'lift)
+        ((plist-get item :sets) 'sets)
+        (t 'plain)))
+
+(defun sprint--form-plan (item)
+  "The plan text of ITEM without its target time."
+  (string-trim (replace-regexp-in-string " · target .*" "" (or (plist-get item :text) ""))))
+
+(defun sprint--per-set-plan (item)
+  "What one set of ITEM is (\"8 per side\" for \"3×8 per side\")."
+  (string-trim (replace-regexp-in-string "\\`[0-9]+×" "" (sprint--form-plan item))))
+
+(defun sprint--form-table (header rows)
+  (concat "| " (mapconcat #'identity header " | ") " |\n|-\n"
+          (mapconcat (lambda (r) (concat "| " (mapconcat #'identity r " | ") " |\n")) rows "")))
+
+(defun sprint--form-exercise (i it)
+  "Form text of exercise number I (plan item IT)."
+  (let* ((plan (sprint--form-plan it))
+         (sets (or (plist-get it :sets) 1)) (reps (or (plist-get it :reps) 1))
+         (kg (plist-get it :kg)) (n #'number-to-string))
+    (concat
+     (format "\n* %d · %s\n" i (plist-get it :name))
+     (if (string-empty-p plan) "" (format "  plan: %s\n" plan))
+     (if (plist-get it :target) (format "  target: %.2f s\n" (plist-get it :target)) "")
+     (pcase (sprint--form-kind it)
+       ('timed (sprint--form-table '("set" "rep" "time (s)" "note")
+                                   (cl-loop for s from 1 to sets
+                                            append (cl-loop for r from 1 to reps
+                                                            collect (list (funcall n s) (funcall n r) "" "")))))
+       ('lift (sprint--form-table '("set" "kg" "reps" "note")
+                                  (cl-loop for s from 1 to sets
+                                           collect (list (funcall n s) (if kg (format "%g" kg) "") (funcall n reps) ""))))
+       ('sets (sprint--form-table '("set" "done" "note")
+                                  (cl-loop for s from 1 to sets collect (list (funcall n s) (sprint--per-set-plan it) ""))))
+       ('plain (format "- done :: %s\n" plan)))
+     (format "- skipped (why) :: %s\n- replaced by :: \n- RPE (1-10) :: \n- note :: \n"
+             (if (equal (plist-get it :state) "SKIPPED") "yes" "")))))
 
 (defun sprint--log-form-text (key abs s items)
   (concat
    (format "#+TITLE: Log · %s %s\n#+STARTUP: showall\n#+SESSION: %s\n"
            (aref sprint--dow-names (sprint--dow abs)) (sprint--short-date abs) key)
    (format "# %s\n" (replace-regexp-in-string "\\`DELOAD −50% volume: " "" (plist-get s :content)))
-   "# Fill in during or after training, then tap [Save] (or C-c C-c).  An empty result = done as planned.\n"
-   "# result :: times 1.96 1.98 2.01 · sets 70x8 70x8 65x8, or reps 8 8 7 at the planned kg · s = skipped\n\n"
+   "# The tables hold the plan: change only what differed.  Delete a row = set not done.\n"
+   "# Timed runs: type each time (empty = run, not timed).  Skipped: write why.  Swapped:\n"
+   "# the exercise after \"replaced by\", and the table holds what you did instead.\n"
+   "# This draft is synced: continue on another device with SPC o S L.  [Save] or C-c C-c stores it.\n\n"
    "* Session\n"
    (mapconcat (lambda (f) (format "- %s :: %s\n" (nth 1 f) (nth 2 f))) sprint--form-session-fields "")
-   (let ((i 0))
-     (mapconcat
-      (lambda (it)
-        (cl-incf i)
-        (format "\n* %d · %s\n%s%s- result :: %s\n- note :: \n" i (plist-get it :name)
-                (if (string-empty-p (string-trim (or (plist-get it :text) ""))) ""
-                  (format "  plan: %s\n" (replace-regexp-in-string " · target .*" "" (plist-get it :text))))
-                (cond ((plist-get it :target) (format "  target: %.2f s\n" (plist-get it :target)))
-                      ((plist-get it :kg) (format "  load: %g kg\n" (plist-get it :kg)))
-                      (t ""))
-                (if (equal (plist-get it :state) "SKIPPED") "s" "")))
-      items ""))
+   (let ((i 0)) (mapconcat (lambda (it) (sprint--form-exercise (cl-incf i) it)) items ""))
    "\n[Save]    [Cancel]\n"))
 
 (defun sprint--mark-children (s recs)
@@ -2614,31 +2714,34 @@ for it (marked :acc-provisional); used only for the indications in the schedule.
     m))
 
 (define-minor-mode sprint-log-form-mode
-  "Log form of a training session: fill in the result lines, then save."
+  "Log form of a training session: fill in the tables, then save."
   :lighter " SprintLog" :keymap sprint-log-form-mode-map
   (when sprint-log-form-mode (sprint--log-form-buttons)))
 
 (defun sprint--log-form (s abs year sched)
-  "Open (or resume) the log form for session S on day ABS."
+  "Open (or resume, from whichever device wrote it last) the log form for session S on day ABS."
   (let* ((key (format "%s | %s" (sprint--str abs) (plist-get s :content)))
-         (file (sprint--log-draft-file))
-         (buf (find-file-noselect file)))
-    (with-current-buffer buf
-      (unless (save-excursion (goto-char (point-min)) (search-forward (concat "#+SESSION: " key "\n") nil t))
-        (when (and (> (buffer-size) 0)
-                   (not (yes-or-no-p "A log form for another session was not saved; discard it? ")))
-          (user-error "Kept the other form: open it with SPC o S L on its day, save or cancel it"))
-        (erase-buffer)
-        (insert (sprint--log-form-text key abs s (sprint--session-items s abs year sched)))
-        (save-buffer))
-      (setq sprint--form-key key)
-      (sprint-log-form-mode 1))
-    (pop-to-buffer-same-window buf)
-    (goto-char (point-min))
-    (re-search-forward "^- CMJ (cm) :: " nil t)
-    (sprint--insert-state)
-    (message "Fill in, then [Save] or C-c C-c")
-    buf))
+         (file (sprint--log-draft-file key))
+         (resumed (and (file-exists-p file) (> (file-attribute-size (file-attributes file)) 0))))
+    (make-directory (file-name-directory file) t)
+    (let ((buf (sprint--fresh-buffer file)))
+      (with-current-buffer buf
+        (unless resumed
+          (erase-buffer)
+          (insert (sprint--log-form-text key abs s (sprint--session-items s abs year sched)))
+          (org-table-map-tables #'org-table-align t)
+          (save-buffer))
+        (setq sprint--form-key key)
+        (sprint-log-form-mode 1))
+      (pop-to-buffer-same-window buf)
+      (goto-char (point-min))
+      (re-search-forward "^- CMJ (cm) :: " nil t)
+      (sprint--insert-state)
+      (message (if resumed
+                   (format "Draft of %s resumed: fill in, then [Save] or C-c C-c"
+                           (format-time-string "%H:%M" (file-attribute-modification-time (file-attributes file))))
+                 "Fill in, then [Save] or C-c C-c"))
+      buf)))
 
 (defun sprint--form-field (label beg end)
   "Value after \"- LABEL :: \" between BEG and END (trimmed), or \"\"."
@@ -2648,52 +2751,148 @@ for it (marked :acc-provisional); used only for the indications in the schedule.
         (string-trim (match-string-no-properties 1))
       "")))
 
-(defun sprint--rec-from-form (item result note)
-  "Record plist for ITEM from the form's RESULT and NOTE strings."
-  (let* ((ans (string-trim result)) (note (and (not (string-empty-p note)) note))
-         (timed (plist-get item :timed)) (kg (plist-get item :kg))
-         (status "DONE") times sets)
-    (cond
-     ((string-empty-p ans)
-      (when (and kg (plist-get item :sets) (plist-get item :reps))
-        (setq sets (cl-loop repeat (plist-get item :sets) collect (cons kg (plist-get item :reps))))))
-     ((string-match "\\`s\\(?:kip\\(?:ped\\)?\\)?\\(?:[ :]+\\(.*\\)\\)?\\'" ans)
-      (setq status "SKIPPED" note (or note (match-string 1 ans))))
-     (t
-      (when (string-match "\\`m\\(?:od\\(?:ified\\)?\\)?[ :]+\\(.*\\)\\'" ans)
-        (setq status "MODIFIED" ans (match-string 1 ans)))
-      (cond
-       (timed
-        (setq times (sprint--parse-times ans))
-        (unless times (user-error "%s: \"%s\" is not a list of times in seconds" (plist-get item :name) ans))
-        (when (< (length times) (sprint--planned-reps item)) (setq status "MODIFIED")))
-       (t
-        (setq sets (sprint--parse-sets ans kg))
-        (if (null sets)
-            (setq note (string-join (delq nil (list ans note)) "; ") status "MODIFIED")
-          (when (and (plist-get item :sets)
-                     (or (< (length sets) (plist-get item :sets))
-                         (cl-some (lambda (x) (< (cdr x) (or (plist-get item :reps) 0))) sets)))
-            (setq status "MODIFIED")))))))
-    (list :status status :note note :times times :sets sets)))
+(defun sprint--form-rows (beg end)
+  "Rows of the table between BEG and END as alists (COLUMN . CELL), the header naming the columns."
+  (save-excursion
+    (goto-char beg)
+    (let (header rows)
+      (while (re-search-forward "^[ \t]*|\\(.*\\)$" end t)
+        (let ((inner (match-string-no-properties 1)))
+          (unless (string-match-p "\\`[-+]" inner)
+            (let ((cells (mapcar #'string-trim (split-string inner "|"))))
+              (when (and cells (string-empty-p (car (last cells)))) (setq cells (butlast cells)))
+              (if header (push (cl-mapcar #'cons header cells) rows)
+                (setq header (mapcar #'downcase cells)))))))
+      (nreverse rows))))
+
+(defun sprint--canonical-exercise (text)
+  "The DB name TEXT stands for (same name or a prefix of it, any case), else TEXT."
+  (let* ((d (downcase text))
+         (e (or (cl-find-if (lambda (e) (equal (downcase (plist-get e :name)) d)) (sprint--db))
+                (cl-find-if (lambda (e) (string-prefix-p d (downcase (plist-get e :name)))) (sprint--db)))))
+    (if e (plist-get e :name) text)))
+
+(defun sprint--rec-from-table (item beg end)
+  "Record plist for ITEM from its part of the form, between BEG and END."
+  (let* ((name (plist-get item :name))
+         (field (lambda (l) (sprint--form-field l beg end)))
+         (skip (funcall field "skipped (why)"))
+         (repl (funcall field "replaced by"))
+         (ex-rpe (let ((r (funcall field "RPE (1-10)")))
+                   (cond ((string-empty-p r) nil)
+                         ((and (string-match-p "\\`[0-9]+\\'" r) (<= 1 (string-to-number r) 10)) (string-to-number r))
+                         (t (user-error "%s: RPE %S is not a whole number from 1 to 10" (plist-get item :name) r)))))
+         (kind (sprint--form-kind item))
+         (rows (sprint--form-rows beg end))
+         (sets-p (or (plist-get item :sets) 1)) (reps-p (or (plist-get item :reps) 1))
+         (kg-p (plist-get item :kg))
+         (cell (lambda (row col) (let ((v (cdr (assoc col row)))) (and v (not (string-empty-p v)) v))))
+         (notes (delq nil (cons (let ((n (funcall field "note"))) (and (not (string-empty-p n)) n))
+                                (mapcar (lambda (r)
+                                          (let ((n (funcall cell r "note")))
+                                            (and n (if (eq kind 'timed)
+                                                       (format "set %s rep %s: %s" (funcall cell r "set") (funcall cell r "rep") n)
+                                                     (format "set %s: %s" (funcall cell r "set") n)))))
+                                        rows))))
+         (status "DONE") times sets reps-done done)
+    (if (not (string-empty-p skip))
+        (progn (setq status "SKIPPED")
+               (unless (member (downcase skip) '("y" "yes" "x" "s" "skip" "skipped")) (push skip notes)))
+      (pcase kind
+        ('timed
+         (dolist (r rows)
+           (let ((tm (funcall cell r "time (s)")))
+             (when tm
+               (setq times (append times (or (sprint--parse-times tm)
+                                             (user-error "%s: %S is not a time in seconds" name tm)))))))
+         (when (< (length rows) (sprint--planned-reps item)) (setq status "MODIFIED")))
+        ('lift
+         (dolist (r rows)
+           (let* ((k (funcall cell r "kg")) (n (funcall cell r "reps"))
+                  (kgv (if k (or (sprint--num (replace-regexp-in-string "," "." k))
+                                 (user-error "%s: kg %S is not a number" name k))
+                         kg-p))
+                  (nv (if n (if (string-match-p "\\`[0-9]+\\'" n) (string-to-number n)
+                              (user-error "%s: reps %S is not a whole number" name n))
+                        reps-p)))
+             (if kgv (push (cons kgv nv) sets) (push nv reps-done))))
+         (setq sets (nreverse sets) reps-done (nreverse reps-done))
+         (when (or (< (length rows) sets-p)
+                   (cl-some (lambda (x) (< (cdr x) reps-p)) sets)
+                   (cl-some (lambda (x) (< x reps-p)) reps-done)
+                   (and kg-p (cl-some (lambda (x) (< (car x) kg-p)) sets)))
+           (setq status "MODIFIED")))
+        ('sets
+         (let ((plan (sprint--per-set-plan item)))
+           (setq done (mapcar (lambda (r) (or (funcall cell r "done") "")) rows))
+           (when (or (< (length rows) sets-p) (cl-some (lambda (d) (not (equal d plan))) done))
+             (setq status "MODIFIED"))))
+        ('plain
+         (let ((d (funcall field "done")))
+           (unless (equal d (sprint--form-plan item)) (setq status "MODIFIED" done (list d)))))))
+    (let ((rec (list :status status :note (and notes (string-join notes "; ")) :ex-rpe ex-rpe)))
+      (if (and (not (string-empty-p repl)) (not (equal status "SKIPPED")))
+          ;; what was done belongs to the replacement, not to the planned exercise
+          (append (list :status "MODIFIED" :note (plist-get rec :note) :ex-rpe ex-rpe
+                        :replaced-by (sprint--canonical-exercise repl)
+                        :replaced-sets (cond (sets (sprint--format-sets sets))
+                                             (reps-done (mapconcat #'number-to-string reps-done " "))
+                                             (times (mapconcat (lambda (x) (format "%.2f" x)) times " "))
+                                             (done (string-join done "; ")))))
+        (append rec (list :times times :sets sets :reps-done reps-done
+                          :done (and done (or (equal status "MODIFIED") (/= (length done) sets-p)) ; extra sets too
+                                     (string-join done "; "))))))))
+
+(defun sprint--session-clock (s)
+  "Clocked minutes of the exercises of schedule session S (current buffer), in order (nil
+where not clocked), and the session span in minutes from the first clock-in to the last
+clock-out: (MINUTES . SPAN)."
+  (save-excursion
+    (goto-char (plist-get s :beg))
+    (let ((end (save-excursion (org-end-of-subtree t t) (point))) mins first last)
+      (forward-line 1)
+      (while (re-search-forward "^\\*\\*\\*+ " end t)
+        (let ((hend (save-excursion (if (re-search-forward "^\\*" end t) (match-beginning 0) end)))
+              (m 0) any)
+          (while (re-search-forward "^[ \t]*CLOCK: \\[\\([^]]+\\)\\]--\\[\\([^]]+\\)\\]" hend t)
+            (let* ((sa (match-string 1)) (sb (match-string 2)) ; parsing changes the match data
+                   (a (float-time (org-time-string-to-time sa)))
+                   (b (float-time (org-time-string-to-time sb))))
+              (setq any t m (+ m (/ (- b a) 60.0))
+                    first (if first (min first a) a) last (if last (max last b) b))))
+          (push (and any (round m)) mins)
+          (goto-char hend)))
+      (cons (nreverse mins) (and first (round (/ (- last first) 60.0)))))))
+
+(defun sprint--clock-out-in (s)
+  "Clock out when the running clock is in schedule session S (current buffer)."
+  (when (and (fboundp 'org-clocking-p) (org-clocking-p)
+             (eq (marker-buffer org-clock-marker) (or (buffer-base-buffer) (current-buffer))))
+    (let ((end (save-excursion (goto-char (plist-get s :beg)) (org-end-of-subtree t t) (point))))
+      (when (<= (plist-get s :beg) org-clock-marker end)
+        (org-clock-out nil t)))))
 
 (defun sprint-log-form-save ()
-  "Store the log form in the training log and mark the session done."
+  "Store the log form in the training log and mark the session done.
+Saving again after a failure replaces the entry written by the failed attempt."
   (interactive)
-  (let* ((key (or sprint--form-key
+  (let* ((form (current-buffer))
+         (key (or sprint--form-key
                   (save-excursion (goto-char (point-min))
                                   (and (re-search-forward "^#\\+SESSION: \\(.*\\)$" nil t) (match-string-no-properties 1)))
                   (user-error "Not a sprint log form")))
          (date (substring key 0 10)) (content (substring key 13))
          (abs (sprint--abs date))
          (year (sprint-season))
-         (sched (find-file-noselect (sprint-file 'schedule year)))
-         (s (or (cl-find-if (lambda (x) (and (eql (plist-get x :abs) abs) (equal (plist-get x :content) content)
-                                             (member (plist-get x :state) '("TODO" "NEXT"))))
-                            (with-current-buffer sched (sprint--schedule-sessions)))
-                (user-error "The session of %s is no longer open in the schedule" date)))
+         (sched (sprint--fresh-buffer (sprint-file 'schedule year)))
+         (find (lambda ()
+                 (or (cl-find-if (lambda (x) (and (eql (plist-get x :abs) abs) (equal (plist-get x :content) content)
+                                                  (member (plist-get x :state) '("TODO" "NEXT"))))
+                                 (with-current-buffer sched (sprint--schedule-sessions)))
+                     (user-error "The session of %s is no longer open in the schedule (logged elsewhere?): [Cancel] this draft" date))))
+         (_ (with-current-buffer sched (sprint--clock-out-in (funcall find))))
+         (s (funcall find))
          (items (sprint--session-items s abs year sched))
-         (form (current-buffer))
          (heads (with-current-buffer form
                   (save-excursion
                     (goto-char (point-min))
@@ -2701,18 +2900,23 @@ for it (marked :acc-provisional); used only for the indications in the schedule.
                       (while (re-search-forward "^\\* \\([0-9]+\\) · " nil t)
                         (push (cons (string-to-number (match-string 1)) (line-beginning-position)) res))
                       (nreverse res)))))
-         (sess-beg (save-excursion (goto-char (point-min)) (re-search-forward "^\\* Session" nil t) (point)))
-         (sess-end (or (cdr (car heads)) (point-max)))
+         (form-end (with-current-buffer form
+                     (save-excursion (goto-char (point-min)) (or (and (re-search-forward "^\\[Save\\]" nil t) (match-beginning 0))
+                                                                 (point-max)))))
+         (sess-beg (with-current-buffer form (save-excursion (goto-char (point-min)) (re-search-forward "^\\* Session" nil t) (point))))
+         (sess-end (or (cdr (car heads)) form-end))
+         (clock (with-current-buffer sched (sprint--session-clock s)))
          (props (cons (cons "CNS" (plist-get s :cns))
-                      (mapcar (lambda (f) (cons (car f) (sprint--form-field (nth 1 f) sess-beg sess-end)))
+                      (mapcar (lambda (f) (cons (car f) (with-current-buffer form (sprint--form-field (nth 1 f) sess-beg sess-end))))
                               sprint--form-session-fields)))
          (recs (let ((i 0))
                  (mapcar (lambda (it)
                            (cl-incf i)
                            (let* ((beg (or (cdr (assoc i heads)) (user-error "Exercise %d is missing in the form" i)))
-                                  (end (or (cdr (assoc (1+ i) heads))
-                                           (save-excursion (goto-char beg) (or (re-search-forward "^\\[Save\\]" nil t) (point-max))))))
-                             (sprint--rec-from-form it (sprint--form-field "result" beg end) (sprint--form-field "note" beg end))))
+                                  (end (or (cdr (assoc (1+ i) heads)) form-end))
+                                  (m (nth (1- i) (car clock))))
+                             (append (with-current-buffer form (sprint--rec-from-table it beg end))
+                                     (list :minutes m))))
                          items)))
          (all-skipped (and recs (cl-every (lambda (r) (equal (plist-get r :status) "SKIPPED")) recs))))
     (let ((cmj (cdr (assoc "CMJ" props))) (rpe (cdr (assoc "RPE" props))))
@@ -2721,25 +2925,33 @@ for it (marked :acc-provisional); used only for the indications in the schedule.
       (unless (or (string-empty-p rpe) (and (string-match-p "\\`[0-9]+\\'" rpe) (<= 1 (string-to-number rpe) 10)))
         (user-error "RPE %S: a whole number from 1 to 10, or empty" rpe)))
     (when (string-empty-p (cdr (assoc "SORENESS" props))) (setcdr (assoc "SORENESS" props) "none"))
+    (when (and (string-empty-p (cdr (assoc "DURATION_MIN" props))) (cdr clock))
+      (setcdr (assoc "DURATION_MIN" props) (number-to-string (cdr clock))))
+    (sprint--fresh-buffer (sprint-file 'log year))
     (sprint--insert-session-log abs content items recs props year)
     (with-current-buffer sched
-      (sprint--mark-children s recs)
-      (goto-char (plist-get s :beg))
-      (org-todo (if all-skipped "SKIPPED" "DONE"))
+      ;; bulk state changes: not the automatic clock's business
+      (let ((this-command 'sprint-log-form-save))
+        (sprint--mark-children s recs)
+        (goto-char (plist-get s :beg))
+        (org-todo (if all-skipped "SKIPPED" "DONE")))
       (save-buffer))
-    (with-current-buffer form
-      (erase-buffer) (save-buffer) (set-buffer-modified-p nil))
-    (kill-buffer form)
+    (let ((file (buffer-file-name form)))
+      (with-current-buffer form (set-buffer-modified-p nil))
+      (kill-buffer form)
+      (when (and file (file-exists-p file)) (delete-file file)))
     (message "Logged %d exercises (%s)" (length recs)
              (mapconcat (lambda (st) (format "%d %s" (cl-count st recs :key (lambda (r) (plist-get r :status)) :test #'equal) st))
                         '("DONE" "MODIFIED" "SKIPPED") ", "))))
 
 (defun sprint-log-form-cancel ()
-  "Discard the log form (nothing is stored)."
+  "Discard the log form (nothing is stored; the synced draft is deleted)."
   (interactive)
   (when (yes-or-no-p "Discard this log form? ")
-    (let ((form (current-buffer)))
-      (erase-buffer) (save-buffer) (kill-buffer form)
+    (let ((form (current-buffer)) (file (buffer-file-name)))
+      (set-buffer-modified-p nil)
+      (kill-buffer form)
+      (when (and file (file-exists-p file)) (delete-file file))
       (message "Log form discarded"))))
 
 ;; Reading the log back
@@ -2770,6 +2982,9 @@ for it (marked :acc-provisional); used only for the indications in the schedule.
                            :hits (sprint--num (funcall g "HITS"))
                            :target (sprint--num (funcall g "TARGET_S"))
                            :note (funcall g "NOTE")
+                           :replaced-by (funcall g "REPLACED_BY")
+                           :ex-rpe (sprint--num (funcall g "EX_RPE"))
+                           :minutes (sprint--num (funcall g "DURATION_MIN"))
                            :cmj-pct (sprint--num (funcall gi "CMJ_PCT")) :rpe (sprint--num (funcall gi "RPE"))
                            :readiness (funcall gi "READINESS")
                            :cns (funcall gi "CNS")
@@ -3269,7 +3484,10 @@ KEY is fatigue, decay, accumulated, targets, lifts, execution or progress."
       (org-map-entries
        (lambda ()
          (when (and (equal (org-entry-get nil "KIND") kind)
-                    (equal (org-entry-get nil "SOURCE_WEEK") (number-to-string source-week))
+                    (or (equal (org-entry-get nil "SOURCE_WEEK") (number-to-string source-week))
+                        ;; a swap is proposed once, whichever week found it
+                        (equal kind "SWAP"))
+                    (or (null value) (equal (org-entry-get nil "VALUE") value))
                     (not (equal (org-get-todo-state) "REJECTED")))
            (setq dup t)))
        nil nil)
@@ -3334,6 +3552,26 @@ KEY is fatigue, decay, accumulated, targets, lifts, execution or progress."
              ;; the 100 m ramp already tightens the flying targets; without it, raise them here
              (unless (plist-get (sprint--target-ctx year) :ramp)
                (funcall add "TARGET" 0.99 nil next 999 (format "W%d on: target times ×0.99 (raised)" next) ev)))))))
+    ;; an exercise replaced by the same one again and again: propose the swap
+    (let ((counts (make-hash-table :test #'equal)))
+      (dolist (r (sprint--log-records year))
+        (when (and (plist-get r :replaced-by) (plist-get r :week)
+                   (<= (- week (1- sprint-swap-window-weeks)) (plist-get r :week) week))
+          (cl-incf (gethash (cons (plist-get r :name) (plist-get r :replaced-by)) counts 0))))
+      (maphash
+       (lambda (k n)
+         (when (>= n sprint-swap-after)
+           (let ((ev (format "%s was replaced by %s %d times in weeks %d–%d."
+                             (car k) (cdr k) n (max 1 (- week (1- sprint-swap-window-weeks))) week)))
+             (if (cl-find (cdr k) (sprint--db) :key (lambda (x) (plist-get x :name)) :test #'equal)
+                 (progn
+                   (setq found (append found (list (list 'swap ev))))
+                   (funcall add "SWAP" nil (format "%s -> %s" (car k) (cdr k)) next 999
+                            (format "W%d on: %s instead of %s" next (cdr k) (car k))
+                            (concat ev "  Edit TO_WEEK to limit it; reject it to keep the plan.")))
+               (setq found (append found (list (list 'swap (format "%s  Add %s to TrainingDB.org to get a swap proposal."
+                                                                   ev (cdr k))))))))))
+       counts))
     (with-current-buffer (get-buffer-create "*sprint-review*")
       (erase-buffer)
       (insert (format "Review of week %d\n\n" week))
@@ -3386,7 +3624,8 @@ KEY is fatigue, decay, accumulated, targets, lifts, execution or progress."
     ("LOAD"       . "lift load factor (kg on the bar)")
     ("TARGET"     . "target time factor (1.03 = 3% easier, 0.99 = harder)")
     ("DELOAD"     . "turn the weeks into deload weeks")
-    ("FV_FOCUS"   . "F-V focus in the balanced phase: force / velocity / balanced"))
+    ("FV_FOCUS"   . "F-V focus in the balanced phase: force / velocity / balanced")
+    ("SWAP"       . "replace an exercise by another (VALUE \"Old -> New\", names from TrainingDB.org)"))
   "Override kinds read by the generator, with a description.")
 
 (defun sprint--resolve-weeks (spec year)
@@ -3420,6 +3659,10 @@ set it to REJECTED and run `sprint-apply' to undo."
          (value (cond ((equal kind "DELOAD") nil)
                       ((equal kind "FV_FOCUS")
                        (sprint--ask-choice "Focus: " '("force" "velocity" "balanced")))
+                      ((equal kind "SWAP")
+                       (let ((names (mapcar (lambda (e) (plist-get e :name)) (sprint--db))))
+                         (format "%s -> %s" (sprint--ask-choice "Replace: " names)
+                                 (sprint--ask-choice "With: " names))))
                       (t (let ((a (string-trim (sprint--ask (format "%s factor (e.g. 0.9 or 1.1): " kind)))))
                            (unless (string-match-p "\\`[0-9]*\\.?[0-9]+\\'" a) (user-error "Not a number: %s" a))
                            a))))
@@ -3434,7 +3677,7 @@ set it to REJECTED and run `sprint-apply' to undo."
        (insert (format "** APPLIED %s (manual)\n:PROPERTIES:\n:KIND: %s\n%s:FROM_WEEK: %d\n:TO_WEEK: %d\n:SOURCE: manual\n:CREATED: %s\n:APPLIED: %s\n:END:\n%s\n"
                        title kind
                        (cond ((null value) "")
-                             ((equal kind "FV_FOCUS") (format ":VALUE: %s\n" value))
+                             ((member kind '("FV_FOCUS" "SWAP")) (format ":VALUE: %s\n" value))
                              (t (format ":FACTOR: %s\n" value)))
                        (car range) (cdr range)
                        (format-time-string "%Y-%m-%d") (format-time-string "%Y-%m-%d")
