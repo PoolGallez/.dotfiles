@@ -1330,14 +1330,35 @@ Also offers Clock in / Clock out.  Meant for a tap (Android tool bar)."
 (define-key glz/org-view-map "l" 'glz/org-view-latex-map)
 
 ;; Images (and other link previews): toggle at point, show subtree/buffer,
-;; clear subtree/buffer.
-(define-key glz/org-view-image-map "p" #'org-link-preview)
+;; clear subtree/buffer.  Org 9.8 renamed the inline-image functions to
+;; org-link-preview*; the Android build ships an older Org, so each command
+;; falls back to the old org-*-inline-images functions there.
+(defun glz/org-preview-show (&optional beg end)
+  "Show link previews between BEG and END (default: the whole buffer)."
+  (if (fboundp 'org-link-preview-region)
+      (org-link-preview-region nil t beg end)
+    (with-no-warnings (org-display-inline-images nil t beg end))))
+
+(defun glz/org-preview-clear (&optional beg end)
+  "Remove link previews between BEG and END (default: the whole buffer)."
+  (if (fboundp 'org-link-preview-clear)
+      (org-link-preview-clear beg end)
+    (with-no-warnings (org-remove-inline-images beg end))))
+
+(defun glz/org-preview-at-point ()
+  "Toggle the preview of the link at point (older Org: of the current line)."
+  (interactive)
+  (if (fboundp 'org-link-preview)
+      (org-link-preview)
+    (with-no-warnings (org-toggle-inline-images nil (line-beginning-position) (line-end-position)))))
+
+(define-key glz/org-view-image-map "p" #'glz/org-preview-at-point)
 (define-key glz/org-view-image-map "s"
-  (lambda () (interactive) (glz/org-with-subtree (org-link-preview-region nil nil beg end))))
-(define-key glz/org-view-image-map "b" (lambda () (interactive) (org-link-preview '(16))))
+  (lambda () (interactive) (glz/org-with-subtree (glz/org-preview-show beg end))))
+(define-key glz/org-view-image-map "b" (lambda () (interactive) (glz/org-preview-show)))
 (define-key glz/org-view-image-map "S"
-  (lambda () (interactive) (glz/org-with-subtree (org-link-preview-clear beg end))))
-(define-key glz/org-view-image-map "B" (lambda () (interactive) (org-link-preview '(64))))
+  (lambda () (interactive) (glz/org-with-subtree (glz/org-preview-clear beg end))))
+(define-key glz/org-view-image-map "B" (lambda () (interactive) (glz/org-preview-clear)))
 
 ;; LaTeX fragments (org-auctex): same layout as the images.
 (when glz/enable-latex-preview
