@@ -1820,12 +1820,12 @@ Also offers Clock in / Clock out.  Meant for a tap (Android tool bar)."
 **** Typst export (ox-typst)
 Adds a Typst backend to the export dispatcher: =C-c C-e y p= exports the
 current org file to PDF (=y o= exports and opens it, =y f= writes only the
-=.typ= file).  Used for the CV in =PKDB/Personal/CVTex/CV.org=, whose whole
-layout is a =#+BEGIN_EXPORT typst= block at the top of that file, so nothing
-CV-specific lives here.  The =typst= binary and the Roboto font the CV uses
-come from the Nix org toolchain (=nixos/modules/home/org-toolchain.nix=).
-=--font-path= points typst straight at the profile's fonts, so Roboto is
-found without depending on fontconfig being set up.
+=.typ= file).  Used for the CV in =PKDB/Personal/CV/CV.org=, whose whole
+layout is a =#+BEGIN_EXPORT typst= block at the top of that file.  The
+=typst= binary and the Roboto font the CV uses come from the Nix org
+toolchain (=nixos/modules/home/org-toolchain.nix=).  =--font-path= points
+typst straight at the profile's fonts, so Roboto is found without depending
+on fontconfig being set up.
 #+begin_src emacs-lisp
 (use-package ox-typst
   :after org
@@ -1834,6 +1834,58 @@ found without depending on fontconfig being set up.
    (concat "typst c --font-path "
            (shell-quote-argument (expand-file-name "~/.nix-profile/share/fonts"))
            " \"%s\"")))
+#+end_src
+
+ox-typst drops property drawers, but the CV keeps its entry data in them
+(=:DATES:= =:ORG:= =:PLACE:= =:DETAILS:= =:PROJECT:=).  Before a Typst
+export parses the buffer copy, this hook turns every headline carrying one
+of those properties into Typst calls the document itself defines:
+=#entry-project[..]= and =#entry-dates[..]= at the end of the title,
+=#entry-meta[..]= (org · place · details) as a line under it, and
+=#entry-children[..]= around sub-entries (projects inside a job).  Values
+stay Org text, so links in them are exported as links.  Files without these
+properties export unchanged.
+#+begin_src emacs-lisp
+(defun glz/org-typst-entries (backend)
+  "Turn entry properties into Typst calls before a Typst export of BACKEND."
+  (when (org-export-derived-backend-p backend 'typst)
+    (let ((props '("DATES" "ORG" "PLACE" "DETAILS" "PROJECT"))
+          (wrap (lambda (fn text) (format "@@typst:#%s[@@%s@@typst:]@@" fn text)))
+          entries)
+      (org-map-entries
+       (lambda ()
+         (when (seq-some (lambda (p) (org-entry-get nil p)) props)
+           (push (point-marker) entries))))
+      ;; `entries' is in reverse buffer order: children before parents, and
+      ;; every edit lies below the headlines still to process.
+      (dolist (m entries)
+        (goto-char m)
+        (let* ((get (lambda (p) (org-entry-get nil p)))
+               (meta (delq nil (mapcar get '("ORG" "PLACE" "DETAILS"))))
+               (title (concat (org-get-heading t t t t)
+                              (when-let* ((p (funcall get "PROJECT")))
+                                (concat " " (funcall wrap "entry-project" p)))
+                              (when-let* ((d (funcall get "DATES")))
+                                (concat " " (funcall wrap "entry-dates" d)))))
+               (first-child (save-excursion
+                              (and (org-goto-first-child)
+                                   (seq-some (lambda (p) (org-entry-get nil p)) props)
+                                   (point)))))
+          (when first-child
+            (save-excursion
+              (org-end-of-subtree t t)
+              (unless (bolp) (insert "\n"))
+              (insert "#+begin_export typst\n]\n#+end_export\n"))
+            (save-excursion
+              (goto-char first-child)
+              (insert "#+begin_export typst\n#entry-children[\n#+end_export\n")))
+          (when meta
+            (save-excursion
+              (org-end-of-meta-data)
+              (insert (funcall wrap "entry-meta" (string-join meta " · ")) "\n\n")))
+          (org-edit-headline title))))))
+
+(add-hook 'org-export-before-parsing-functions #'glz/org-typst-entries)
 #+end_src
 **** Keybindings
 Inside org buffers, in Meow normal state:

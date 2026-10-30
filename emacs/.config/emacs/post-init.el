@@ -1216,6 +1216,47 @@ Also offers Clock in / Clock out.  Meant for a tap (Android tool bar)."
            (shell-quote-argument (expand-file-name "~/.nix-profile/share/fonts"))
            " \"%s\"")))
 
+(defun glz/org-typst-entries (backend)
+  "Turn entry properties into Typst calls before a Typst export of BACKEND."
+  (when (org-export-derived-backend-p backend 'typst)
+    (let ((props '("DATES" "ORG" "PLACE" "DETAILS" "PROJECT"))
+          (wrap (lambda (fn text) (format "@@typst:#%s[@@%s@@typst:]@@" fn text)))
+          entries)
+      (org-map-entries
+       (lambda ()
+         (when (seq-some (lambda (p) (org-entry-get nil p)) props)
+           (push (point-marker) entries))))
+      ;; `entries' is in reverse buffer order: children before parents, and
+      ;; every edit lies below the headlines still to process.
+      (dolist (m entries)
+        (goto-char m)
+        (let* ((get (lambda (p) (org-entry-get nil p)))
+               (meta (delq nil (mapcar get '("ORG" "PLACE" "DETAILS"))))
+               (title (concat (org-get-heading t t t t)
+                              (when-let* ((p (funcall get "PROJECT")))
+                                (concat " " (funcall wrap "entry-project" p)))
+                              (when-let* ((d (funcall get "DATES")))
+                                (concat " " (funcall wrap "entry-dates" d)))))
+               (first-child (save-excursion
+                              (and (org-goto-first-child)
+                                   (seq-some (lambda (p) (org-entry-get nil p)) props)
+                                   (point)))))
+          (when first-child
+            (save-excursion
+              (org-end-of-subtree t t)
+              (unless (bolp) (insert "\n"))
+              (insert "#+begin_export typst\n]\n#+end_export\n"))
+            (save-excursion
+              (goto-char first-child)
+              (insert "#+begin_export typst\n#entry-children[\n#+end_export\n")))
+          (when meta
+            (save-excursion
+              (org-end-of-meta-data)
+              (insert (funcall wrap "entry-meta" (string-join meta " · ")) "\n\n")))
+          (org-edit-headline title))))))
+
+(add-hook 'org-export-before-parsing-functions #'glz/org-typst-entries)
+
 (define-prefix-command 'glz/org-clock-map)
 (define-key glz/org-clock-map "i" #'org-clock-in)
 (define-key glz/org-clock-map "o" #'org-clock-out)

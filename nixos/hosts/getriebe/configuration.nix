@@ -44,14 +44,20 @@
 
   # The Novatek I2C-HID touchscreen sometimes comes back dead from s2idle
   # (it stays bound but never sends reports). Rebinding the driver on
-  # every resume re-initialises it; it takes about a second.
+  # every resume re-initialises it. Right after resume the controller can
+  # still be waking up and the probe reads a garbage HID descriptor, so
+  # retry with a growing delay until the bind sticks.
   powerManagement.resumeCommands = ''
     dev=i2c-NVTK0603:00
     drv=/sys/bus/i2c/drivers/i2c_hid_acpi
     if [ -e /sys/bus/i2c/devices/$dev ]; then
       [ -e $drv/$dev ] && echo $dev > $drv/unbind
-      sleep 0.5
-      echo $dev > $drv/bind || echo "touchscreen rebind failed" >&2
+      for delay in 1 2 3 5 8; do
+        sleep $delay
+        echo $dev > $drv/bind 2>/dev/null && [ -e $drv/$dev ] && break
+        echo "touchscreen rebind failed, retrying" >&2
+      done
+      [ -e $drv/$dev ] || echo "touchscreen rebind gave up" >&2
     fi
   '';
 

@@ -57,6 +57,15 @@
   "Exercise database (used by `sprint-validate')."
   :type 'file)
 
+(defcustom sprint-sketch-directory
+  (expand-file-name "sketches/" sprint-directory)
+  "Directory of the exercise drawings named by SKETCH in `sprint-db-file'."
+  :type 'directory)
+
+(defcustom sprint-sketch-width 460
+  "Width in pixels of the exercise drawings shown inline in today's view."
+  :type 'integer)
+
 (defcustom sprint-season-year nil
   "Season to operate on.  nil means the highest sprint_config_YYYY.org found."
   :type '(choice (const nil) integer))
@@ -385,8 +394,8 @@ default, race, train or taper (the 10-day taper table)."
   :type 'boolean)
 
 (defcustom sprint-show-execution t
-  "Non-nil: put each exercise's EXECUTION (TrainingDB.org) on a \"How:\" line under it
-in the schedule, and in the shared HTML."
+  "Non-nil: put each exercise's EXECUTION, REST and SKETCH (TrainingDB.org) under it,
+as a How / Rest / Sketch list in the schedule, and in the shared HTML."
   :type 'boolean)
 
 (defvar sprint--all-weeks nil "Week records of the season being generated.")
@@ -419,7 +428,9 @@ in the schedule, and in the shared HTML."
                           :unit (cdr (assoc "VOLUME_UNIT" props))
                           :vol (cdr (assoc "TYPICAL_VOLUME" props))
                           :next (cdr (assoc "PROGRESSION" props))
-                          :how (cdr (assoc "EXECUTION" props)))
+                          :how (cdr (assoc "EXECUTION" props))
+                          :rest (cdr (assoc "REST" props))
+                          :sketch (cdr (assoc "SKETCH" props)))
                     res))))
         (nreverse res)))))
 
@@ -1162,19 +1173,47 @@ Records the picks in `sprint--session-picks' (the caller binds it)."
   "One \"*** TODO\" line per exercise of JOINED (texts separated by \\x1f)."
   (mapconcat (lambda (s) (concat "*** TODO " s "\n" (sprint--how-line s))) (split-string joined "\x1f" t) ""))
 
+(defun sprint--how-sentences (how)
+  "HOW (an EXECUTION text) split into its sentences."
+  (let ((p (replace-regexp-in-string "\\b\\(e\\.g\\|i\\.e\\|vs\\|approx\\|ca\\)\\. " "\\1.\x1e" how)))
+    (mapcar (lambda (s) (replace-regexp-in-string "\x1e" " " s))
+            (split-string (replace-regexp-in-string "\\([.!]\\)[ \t]+\\([[:upper:][:digit:](~≥'\"]\\)"
+                                                    "\\1\x1f\\2" p)
+                          "\x1f" t "[ \t]+"))))
+
+(defun sprint--sketch-file (e)
+  "Absolute file of the drawing of DB exercise E, or nil when it has none on disk."
+  (when-let* ((s (plist-get e :sketch))
+              (f (expand-file-name s sprint-sketch-directory)))
+    (and (file-exists-p f) f)))
+
+(defconst sprint--how-block-re
+  (concat "^\\(?:[ \t]+How: .*\\(?:\n\\|\\'\\)"         ; the old one-line form
+          "\\|    - How ::.*\\(?:\n\\|\\'\\)\\(?:      - .*\\(?:\n\\|\\'\\)\\)*"
+          "\\(?:    - Rest ::.*\\(?:\n\\|\\'\\)\\)?\\(?:    - Sketch ::.*\\(?:\n\\|\\'\\)\\)?\\)")
+  "A How / Rest / Sketch block written by `sprint--how-line'.")
+
 (defun sprint--how-line (text)
-  "The \"How:\" body line of the exercise TEXT (its EXECUTION in the DB), or \"\".
+  "The How / Rest / Sketch block of the exercise TEXT (from the DB), or \"\":
+  - How ::      one sub-item per sentence of EXECUTION
+  - Rest ::     REST
+  - Sketch ::   link to the SKETCH drawing, relative to `sprint-directory'
 Indented, so the parsers of \"- Category: …\" lines and the hand-edit hash ignore it."
-  (let ((how (and sprint-show-execution (plist-get (sprint--db-match text) :how))))
-    (if (and how (not (string-empty-p how))) (format "    How: %s\n" how) "")))
+  (let* ((e (and sprint-show-execution (sprint--db-match text)))
+         (how (plist-get e :how)) (rest (plist-get e :rest)) (sk (sprint--sketch-file e)))
+    (if (or (null how) (string-empty-p how)) ""
+      (concat "    - How ::\n"
+              (mapconcat (lambda (s) (format "      - %s\n" s)) (sprint--how-sentences how) "")
+              (if (and rest (not (string-empty-p rest))) (format "    - Rest :: %s\n" rest) "")
+              (if sk (format "    - Sketch :: [[file:%s]]\n" (file-relative-name sk sprint-directory)) "")))))
 
 (defun sprint--annotate-how (text)
-  "TEXT with every exercise sub-heading followed by its current \"How:\" line.
-Old How lines are dropped first, so a changed DB shows up on the next generation."
+  "TEXT with every exercise sub-heading followed by its current How / Rest / Sketch block.
+Old blocks are dropped first, so a changed DB shows up on the next generation."
   (with-temp-buffer
     (insert text)
     (goto-char (point-min))
-    (while (re-search-forward "^[ \t]+How: .*\n?" nil t) (replace-match ""))
+    (while (re-search-forward sprint--how-block-re nil t) (replace-match ""))
     (goto-char (point-min))
     (while (re-search-forward "^\\*\\*\\*+ \\(?:\\(?:TODO\\|NEXT\\|IN-WORK\\|DONE\\|SKIPPED\\) \\)?\\(.*?\\)[ \t]*$" nil t)
       (let ((how (sprint--how-line (match-string 1))))
@@ -2099,8 +2138,14 @@ logs the session, SPC o S d records that the day went differently."
                             (save-excursion (goto-char (plist-get (car (last sessions)) :beg))
                                             (org-end-of-subtree t t) (point)))
           (if (fboundp 'org-fold-show-all) (org-fold-show-all) (outline-show-all))
+          ;; the Sketch links as pictures; C-c C-x C-v hides / shows them
+          (when (display-images-p)
+            (let ((org-image-actual-width (list sprint-sketch-width)))
+              (if (fboundp 'org-link-preview-region)
+                  (org-link-preview-region)
+                (with-no-warnings (org-display-inline-images)))))
           (setq header-line-format
-                (format " %s %s · week %s · %s · C-c C-t tick · SPC o S L log · SPC o S d not as planned"
+                (format " %s %s · week %s · %s · C-c C-t tick · C-c C-x C-v sketches · SPC o S L log · SPC o S d not as planned"
                         (aref sprint--dow-names (sprint--dow abs)) (sprint--short-date abs)
                         (or (plist-get ctx :n) "-") (sprint--phase-label ctx)))
           (goto-char (point-min)))
@@ -3988,6 +4033,40 @@ plan; for a single phase or week narrow with C-x n s / use C-c C-e C-s."
   (replace-regexp-in-string
    "[&<>\"]" (lambda (m) (pcase m ("&" "&amp;") ("<" "&lt;") (">" "&gt;") (_ "&quot;"))) (or s "") t t))
 
+(defvar sprint--html-sketches nil
+  "Alist CSS-class -> drawing file of the sketches used by the page being exported.")
+
+(defun sprint--how-html (e)
+  "The collapsible \"how\" of DB exercise E for the shared HTML (steps, rest, sketch), or \"\".
+The sketch is a CSS class, so each drawing is embedded once however often it appears."
+  (let ((how (and sprint-show-execution (plist-get e :how))))
+    (if (or (null how) (string-empty-p how)) ""
+      (let* ((rest (plist-get e :rest)) (sk (sprint--sketch-file e))
+             (cls (and sk (concat "sk-" (replace-regexp-in-string "[^[:alnum:]-]" "-" (file-name-base sk))))))
+        (when (and cls (not (assoc cls sprint--html-sketches)))
+          (push (cons cls sk) sprint--html-sketches))
+        (concat "<details class=\"how\"><summary>how</summary><ul>"
+                (mapconcat (lambda (s) (format "<li>%s</li>" (sprint--h s))) (sprint--how-sentences how) "")
+                "</ul>"
+                (if (and rest (not (string-empty-p rest)))
+                    (format "<div class=\"rest\"><b>Rest</b> %s</div>" (sprint--h rest)) "")
+                (if cls (format "<div class=\"sk %s\" role=\"img\" aria-label=\"sketch\"></div>" cls) "")
+                "</details>")))))
+
+(defun sprint--sketch-style ()
+  "A <style> with one class per drawing in `sprint--html-sketches', each embedded once."
+  (if (null sprint--html-sketches) ""
+    (concat "<style>"
+            (mapconcat
+             (lambda (c)
+               (let* ((svg (with-temp-buffer (insert-file-contents-literally (cdr c)) (buffer-string)))
+                      (w (and (string-match "width=\"\\([0-9.]+\\)\"" svg) (match-string 1 svg)))
+                      (h (and (string-match "height=\"\\([0-9.]+\\)\"" svg) (match-string 1 svg))))
+                 (format ".%s{background-image:url(data:image/svg+xml;base64,%s);aspect-ratio:%s/%s;max-width:%spx}"
+                         (car c) (base64-encode-string svg t) (or w 3) (or h 1) (or w 480))))
+             sprint--html-sketches "")
+            "</style>")))
+
 (defun sprint--short-date (abs &optional year)
   (let ((g (calendar-gregorian-from-absolute abs)))
     (format "%d %s%s" (nth 1 g) (aref sprint--month-names (1- (car g)))
@@ -4114,6 +4193,8 @@ h1{font-size:1.7rem;margin:0 0 4px}h2{font-size:1.25rem;margin:36px 0 12px}h3{fo
 .sess .t{font-weight:600}.badge{display:inline-block;font-size:.68rem;font-weight:700;border-radius:20px;padding:1px 8px;margin-right:6px;color:#fff;vertical-align:1px}
 .ex{margin:6px 0 0;padding:0;list-style:none;font-size:.86rem}.ex li{margin:3px 0}.ex .cat{color:var(--muted)}
 .ex .how{font-size:.8rem;color:var(--muted);margin:1px 0 4px}.ex .how summary{cursor:pointer;width:max-content}
+.ex .how ul{margin:3px 0 4px 1.2em;padding:0;list-style:disc}.ex .how li{margin:1px 0}.ex .how .rest b{font-weight:600}
+.ex .how .sk{width:100%;margin-top:6px;background-size:contain;background-repeat:no-repeat}
 .ex .tg{color:var(--muted);font-size:.8rem}.target{color:var(--high);font-weight:600}
 footer{margin-top:40px;color:var(--muted);font-size:.8rem}
 a{color:inherit}.tl-wk,.chip,.cal-wk a{text-decoration:none}.code,.wk-short{display:none}
@@ -4138,6 +4219,7 @@ a{color:inherit}.tl-wk,.chip,.cal-wk a{text-decoration:none}.code,.wk-short{disp
                   ("gym" . "Gym") ("test" . "Testing") ("race" . "Race") ("taper" . "Taper")))
 
          (now-week (sprint--week-at today all-weeks))
+         (sprint--html-sketches nil)
          (o (list)))
     (cl-flet ((out (&rest xs) (push (apply #'concat xs) o)))
       (out "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"
@@ -4250,21 +4332,19 @@ a{color:inherit}.tl-wk,.chip,.cal-wk a{text-decoration:none}.code,.wk-short{disp
                           (cond ((string-match "\\`- Targets: \\(.*\\)" l)
                                  (format "<li class=\"tg\">Volume: %s</li>" (sprint--h (match-string 1 l))))
                                 ((string-match "\\`- \\([^:]+\\): \\(.*\\)" l)
-                                 (let* ((cat (match-string 1 l)) (txt (match-string 2 l))
-                                        (how (and sprint-show-execution (plist-get (sprint--db-match txt) :how))))
+                                 (let* ((cat (match-string 1 l)) (txt (match-string 2 l)))
                                    (format "<li><span class=\"cat\">%s:</span> %s%s</li>" (sprint--h cat)
                                            (replace-regexp-in-string
                                             "· target \\(~?[0-9.]+ s\\)\\(.*?\\)\\(;\\|$\\)"
                                             "· <span class=\"target\">target \\1</span>\\2\\3"
                                             (sprint--h txt))
-                                           (if (and how (not (string-empty-p how)))
-                                               (format "<details class=\"how\"><summary>how</summary>%s</details>" (sprint--h how))
-                                             ""))))
+                                           (sprint--how-html (sprint--db-match txt)))))
                                 (t "")))
                         (plist-get s :lines) "")
                        "</ul></div>"))))
             (out "</div></div>")))
         (out "</section>"))
+      (out (sprint--sketch-style))
       (out (format "<footer>Generated %s from the season plan. Volumes, loads and target times are indications; the day's readiness decides.</footer></main></body></html>"
                    (format-time-string "%Y-%m-%d"))))
     (apply #'concat (nreverse o))))
